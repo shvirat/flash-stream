@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { P2PClient } from '../utils/peerClient';
-import { Copy, Check, File, UploadCloud, Loader2, RefreshCw } from 'lucide-react';
+import { Copy, Check, File, UploadCloud, Loader2, RefreshCw, X, ArrowRight } from 'lucide-react';
 import toast from 'react-hot-toast';
 import clsx from 'clsx';
 
@@ -18,7 +18,6 @@ function Sender() {
 
     useEffect(() => {
         const client = clientRef.current;
-        // Persistence: Load saved ID, but ignore legacy long IDs
         let savedId = localStorage.getItem('senderId');
         if (savedId && savedId.length > 8) savedId = null;
 
@@ -29,7 +28,6 @@ function Sender() {
                 toast.success('Receiver Connected!');
             }
             if (msg === 'File Sent!') {
-                // Keep connected true
                 toast.success('File Sent Successfully!');
             }
             if (msg === 'Disconnected' || msg.startsWith('Error')) {
@@ -42,7 +40,6 @@ function Sender() {
 
         client.init(true, savedId, 1).then((id) => {
             setPeerId(id);
-            // Persistence: Save ID
             localStorage.setItem('senderId', id);
             setStatus('Waiting for connection...');
         }).catch((err) => {
@@ -50,19 +47,9 @@ function Sender() {
             toast.error(`Failed: ${err.type || 'Connection Error'}`);
         });
 
-        // Global Drag & Drop events
-        const handleDragOver = (e) => {
-            e.preventDefault();
-            setIsDragging(true);
-        };
-        const handleDragLeave = (e) => {
-            e.preventDefault();
-            setIsDragging(false);
-        };
-        const handleDrop = (e) => {
-            e.preventDefault();
-            setIsDragging(false);
-        };
+        const handleDragOver = (e) => { e.preventDefault(); setIsDragging(true); };
+        const handleDragLeave = (e) => { e.preventDefault(); setIsDragging(false); };
+        const handleDrop = (e) => { e.preventDefault(); setIsDragging(false); };
 
         window.addEventListener('dragover', handleDragOver);
         window.addEventListener('dragleave', handleDragLeave);
@@ -93,30 +80,18 @@ function Sender() {
             return;
         }
 
-        // Cleanup old peer
-        if (clientRef.current.peer) {
-            clientRef.current.destroy();
-        }
-
+        if (clientRef.current.peer) clientRef.current.destroy();
         setPeerId('');
         localStorage.removeItem('senderId');
 
-        // Re-init with new random ID
         clientRef.current = new P2PClient();
         const client = clientRef.current;
 
-        // Restore event handlers
         client.onStatus = (msg) => {
             setStatus(msg);
-            if (msg === 'Connected') {
-                setIsConnected(true);
-                toast.success('Receiver Connected!');
-            }
+            if (msg === 'Connected') { setIsConnected(true); toast.success('Receiver Connected!'); }
             if (msg === 'File Sent!') toast.success('File Sent Successfully!');
-            if (msg === 'Disconnected' || msg.startsWith('Error')) {
-                setIsConnected(false);
-                toast.error(msg);
-            }
+            if (msg === 'Disconnected' || msg.startsWith('Error')) { setIsConnected(false); toast.error(msg); }
         };
         client.onProgress = (p) => setProgress(p);
 
@@ -132,9 +107,7 @@ function Sender() {
     };
 
     const handleFileChange = (e) => {
-        if (e.target.files?.[0]) {
-            setFile(e.target.files[0]);
-        }
+        if (e.target.files?.[0]) setFile(e.target.files[0]);
     };
 
     const handleDropZone = (e) => {
@@ -152,180 +125,177 @@ function Sender() {
         setStatus('Sending...');
         const toastId = toast.loading('Sending file...');
 
-        // Wrap original onStatus to dismiss loading toast
         const originalStatus = clientRef.current.onStatus;
         clientRef.current.onStatus = (msg) => {
-            if (msg === 'File Sent!' || msg.includes('Error')) {
-                toast.dismiss(toastId);
-            }
+            if (msg === 'File Sent!' || msg.includes('Error')) toast.dismiss(toastId);
             originalStatus(msg);
         };
-
         clientRef.current.sendFile(file);
     };
 
     const cancelTransfer = () => {
         clientRef.current.cancelTransfer();
-        toast.dismiss(); // Dismiss any loading toasts
+        toast.dismiss();
         toast.error('Transfer Cancelled');
         setStatus('Cancelled');
         setProgress(0);
     };
 
     return (
-        <div className="card">
-            <h2 style={{ marginBottom: '1.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                <UploadCloud size={24} color="#58a6ff" />
-                Send Mode
-            </h2>
+        <div className="w-full max-w-2xl mx-auto px-4">
+            <div className="glass-panel p-6 sm:p-8 rounded-2xl animate-fade-in relative overflow-hidden">
+                {/* Decorative Glow */}
+                <div className="absolute top-0 right-0 w-64 h-64 bg-blue-500/10 rounded-full blur-3xl -z-10 -translate-y-1/2 translate-x-1/2"></div>
 
-            {!peerId ? (
-                <div style={{ padding: '2rem', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1rem', color: 'var(--text-dim)' }}>
-                    <Loader2 className="spin" size={32} />
-                    Generating Secure ID...
+                <div className="flex items-center gap-3 mb-8">
+                    <div className="p-3 bg-blue-500/20 rounded-xl">
+                        <UploadCloud size={24} className="text-blue-400" />
+                    </div>
+                    <div>
+                        <h2 className="text-2xl font-bold text-white">Send File</h2>
+                        <p className="text-dim text-sm">Share securely with a peer</p>
+                    </div>
                 </div>
-            ) : (
-                <>
-                    <div style={{ marginBottom: '2rem', textAlign: 'left' }}>
-                        <label style={{ display: 'block', fontSize: '0.9rem', color: 'var(--text-dim)', marginBottom: '0.5rem' }}>
-                            Share this ID with the receiver:
-                        </label>
-                        <div style={{ display: 'flex', gap: '0.5rem' }}>
-                            <div style={{
-                                flex: 1,
-                                background: '#0d1117',
-                                border: '1px solid var(--border-color)',
-                                padding: '0.8rem',
-                                borderRadius: '6px',
-                                fontFamily: 'monospace',
-                                fontSize: '1.1rem',
-                                color: '#58a6ff',
-                                overflow: 'hidden',
-                                textOverflow: 'ellipsis'
-                            }}>
-                                {peerId}
-                            </div>
-                            <button onClick={copyToClipboard} title="Copy ID">
-                                {copied ? <Check size={20} color="#238636" /> : <Copy size={20} />}
-                            </button>
-                            <button onClick={generateNewId} title="Generate New ID" disabled={isConnected}>
-                                <RefreshCw size={20} />
-                            </button>
-                        </div>
-                    </div>
 
-                    <div
-                        onDrop={handleDropZone}
-                        onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
-                        onDragLeave={(e) => { e.preventDefault(); setIsDragging(false); }}
-                        style={{
-                            border: `2px dashed ${isDragging ? '#58a6ff' : 'var(--border-color)'}`,
-                            borderRadius: '8px',
-                            padding: '3rem',
-                            textAlign: 'center',
-                            marginBottom: '2rem',
-                            cursor: 'pointer',
-                            background: isDragging
-                                ? 'rgba(88, 166, 255, 0.15)'
-                                : (file ? 'rgba(88, 166, 255, 0.05)' : 'transparent'),
-                            borderColor: (isDragging || file) ? '#58a6ff' : 'var(--border-color)',
-                            transition: 'all 0.2s ease'
-                        }}
-                    >
-                        <input
-                            type="file"
-                            onChange={handleFileChange}
-                            style={{ display: 'none' }}
-                            id="file-input"
-                        />
-                        <label htmlFor="file-input" style={{ cursor: 'pointer', width: '100%', display: 'block' }}>
-                            {file ? (
-                                <div>
-                                    <File size={48} color="#58a6ff" style={{ margin: '0 auto 1rem' }} />
-                                    <div style={{ fontWeight: '600', marginBottom: '0.5rem' }}>{file.name}</div>
-                                    <div style={{ color: 'var(--text-dim)', fontSize: '0.9rem' }}>
-                                        {(file.size / (1024 * 1024)).toFixed(2)} MB
-                                    </div>
-                                    <div style={{ marginTop: '1rem', color: '#58a6ff', fontSize: '0.8rem' }}>
-                                        Click or Drop to change
-                                    </div>
+                {!peerId ? (
+                    <div className="flex flex-col items-center justify-center py-12 gap-4 text-dim">
+                        <Loader2 className="animate-spin text-blue-500" size={48} />
+                        <span className="font-medium animate-pulse">Generating Secure ID...</span>
+                    </div>
+                ) : (
+                    <>
+                        <div className="mb-8">
+                            <label className="text-xs text-blue-300 font-bold uppercase tracking-wider mb-2 block">
+                                Your Session ID
+                            </label>
+                            <div className="glass-card p-2 rounded-xl flex items-center gap-2 border border-blue-500/30 bg-blue-500/5">
+                                <div className="flex-1 font-mono text-xl sm:text-2xl text-center text-blue-400 font-bold tracking-widest py-2 select-all">
+                                    {peerId}
                                 </div>
-                            ) : (
-                                <div>
-                                    <UploadCloud size={48} color={isDragging ? '#58a6ff' : 'var(--text-dim)'} style={{ margin: '0 auto 1rem' }} />
-                                    <div style={{ color: isDragging ? '#58a6ff' : 'var(--text-dim)', fontWeight: isDragging ? 600 : 400 }}>
-                                        {isDragging ? 'Drop file here!' : 'Click or Drag file here'}
-                                    </div>
+                                <div className="flex flex-col sm:flex-row gap-1">
+                                    <button
+                                        onClick={copyToClipboard}
+                                        className="p-3 hover:bg-blue-500/20 rounded-lg text-blue-300 transition-colors"
+                                        title="Copy ID"
+                                    >
+                                        {copied ? <Check size={20} /> : <Copy size={20} />}
+                                    </button>
+                                    <button
+                                        onClick={generateNewId}
+                                        disabled={isConnected}
+                                        className="p-3 hover:bg-blue-500/20 rounded-lg text-blue-300 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                        title="Generate New ID"
+                                    >
+                                        <RefreshCw size={20} />
+                                    </button>
                                 </div>
+                            </div>
+                            <p className="text-center text-xs text-dim mt-2">
+                                Share this code with the receiver to connect.
+                            </p>
+                        </div>
+
+                        <div
+                            onDrop={handleDropZone}
+                            onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
+                            onDragLeave={(e) => { e.preventDefault(); setIsDragging(false); }}
+                            className={clsx(
+                                "border-2 border-dashed rounded-2xl transition-all duration-300 text-center cursor-pointer relative group",
+                                isDragging
+                                    ? "border-blue-400 bg-blue-500/10 scale-[1.02]"
+                                    : "border-white/10 hover:border-blue-500/50 hover:bg-white/5"
                             )}
-                        </label>
-                    </div>
-
-                    {progress > 0 && (
-                        <div style={{ marginBottom: '1.5rem' }}>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem', fontSize: '0.9rem' }}>
-                                <span>Transfer Progress</span>
-                                <span>{progress}%</span>
-                            </div>
-                            <div style={{ width: '100%', height: '8px', background: '#30363d', borderRadius: '4px', overflow: 'hidden' }}>
-                                <div style={{
-                                    width: `${progress}%`,
-                                    height: '100%',
-                                    background: '#238636',
-                                    transition: 'width 0.2s ease'
-                                }} />
-                            </div>
+                        >
+                            <input
+                                type="file"
+                                onChange={handleFileChange}
+                                className="hidden"
+                                id="file-input"
+                            />
+                            <label htmlFor="file-input" className="block p-8 sm:p-12 cursor-pointer w-full h-full">
+                                {file ? (
+                                    <div className="animate-slide-up">
+                                        <div className="w-16 h-16 mx-auto mb-4 bg-blue-500/20 rounded-full flex items-center justify-center">
+                                            <File size={32} className="text-blue-400" />
+                                        </div>
+                                        <h3 className="text-lg font-bold text-white mb-1 truncate max-w-full px-4">{file.name}</h3>
+                                        <p className="text-dim font-mono text-sm mb-4">
+                                            {(file.size / (1024 * 1024)).toFixed(2)} MB
+                                        </p>
+                                        <span className="text-xs text-blue-300 uppercase tracking-widest font-bold border border-blue-500/30 px-3 py-1 rounded-full">
+                                            Ready to Send
+                                        </span>
+                                    </div>
+                                ) : (
+                                    <div className="group-hover:-translate-y-1 transition-transform duration-300">
+                                        <div className={clsx("w-16 h-16 mx-auto mb-4 rounded-full flex items-center justify-center transition-colors", isDragging ? "bg-blue-500/20" : "bg-white/5")}>
+                                            <UploadCloud size={32} className={clsx("transition-colors", isDragging ? "text-blue-400" : "text-dim group-hover:text-blue-400")} />
+                                        </div>
+                                        <h3 className="text-lg font-bold text-white mb-2">
+                                            {isDragging ? 'Drop it here!' : 'Choose a file'}
+                                        </h3>
+                                        <p className="text-dim text-sm max-w-xs mx-auto">
+                                            Drag & drop your file here, or click to browse.
+                                        </p>
+                                    </div>
+                                )}
+                            </label>
                         </div>
-                    )}
 
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <div style={{
-                            fontSize: '0.9rem',
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '0.5rem'
-                        }}>
-                            <span className={clsx({
-                                'status-dot': true,
-                                'connected': status === 'Connected',
-                                'error': status.includes('Error')
-                            })} style={{
-                                width: '8px', height: '8px', borderRadius: '50%',
-                                background: status === 'Connected' ? '#238636' : (status.includes('Error') ? '#da3633' : '#8b949e')
-                            }}></span>
-                            {status}
-                        </div>
-                        <div style={{ display: 'flex', gap: '0.5rem' }}>
-                            {status === 'Sending...' && (
+                        {progress > 0 && (
+                            <div className="mt-8 animate-fade-in">
+                                <div className="flex justify-between mb-2 text-sm font-medium">
+                                    <span className="text-blue-300">Transferring...</span>
+                                    <span className="text-white font-mono">{progress}%</span>
+                                </div>
+                                <div className="w-full h-3 bg-white/5 rounded-full overflow-hidden border border-white/5">
+                                    <div
+                                        className="h-full bg-linear-to-r from-blue-500 to-purple-500 shadow-[0_0_15px_rgba(59,130,246,0.5)]"
+                                        style={{ width: `${progress}%`, transition: 'width 0.2s linear' }}
+                                    />
+                                </div>
+                            </div>
+                        )}
+
+                        <div className="mt-8 pt-6 border-t border-white/10 flex flex-col sm:flex-row justify-between items-center gap-4">
+                            <div className="flex items-center gap-3 bg-black/20 px-4 py-2 rounded-lg w-full sm:w-auto justify-center sm:justify-start">
+                                <span
+                                    className={clsx("w-2.5 h-2.5 rounded-full animate-pulse", {
+                                        'bg-emerald-500 shadow-[0_0_8px_#10b981]': status === 'Connected',
+                                        'bg-red-500': status.includes('Error'),
+                                        'bg-yellow-500': !status.includes('Error') && status !== 'Connected'
+                                    })}
+                                />
+                                <span className="text-sm font-medium text-dim">{status}</span>
+                            </div>
+
+                            <div className="flex gap-3 w-full sm:w-auto">
+                                {status === 'Sending...' && (
+                                    <button
+                                        onClick={cancelTransfer}
+                                        className="flex-1 sm:flex-none px-6 py-3 rounded-xl font-bold bg-red-500/10 text-red-400 hover:bg-red-500/20 border border-red-500/20 transition-all"
+                                    >
+                                        Cancel
+                                    </button>
+                                )}
                                 <button
-                                    onClick={cancelTransfer}
-                                    style={{
-                                        background: '#da3633',
-                                        borderColor: '#da3633',
-                                        color: 'white',
-                                        padding: '0.8em 1.5em'
-                                    }}
+                                    onClick={sendFile}
+                                    disabled={!file || !isConnected || status === 'Sending...'}
+                                    className={clsx(
+                                        "flex-1 sm:flex-none px-8 py-3 rounded-xl font-bold flex items-center justify-center gap-2 transition-all",
+                                        (!file || !isConnected || status === 'Sending...')
+                                            ? "bg-white/5 text-dim cursor-not-allowed"
+                                            : "bg-blue-600 hover:bg-blue-500 text-white shadow-lg hover:shadow-blue-500/25 active:scale-95"
+                                    )}
                                 >
-                                    Cancel
+                                    {status === 'Sending...' ? <Loader2 className="animate-spin" size={20} /> : <ArrowRight size={20} />}
+                                    {status === 'Sending...' ? 'Sending...' : 'Send Now'}
                                 </button>
-                            )}
-                            <button
-                                onClick={sendFile}
-                                disabled={!file || !isConnected || status === 'Sending...'}
-                                style={{
-                                    opacity: (!file || !isConnected || status === 'Sending...') ? 0.5 : 1,
-                                    background: '#238636',
-                                    borderColor: '#238636',
-                                    color: 'white',
-                                    padding: '0.8em 1.5em'
-                                }}
-                            >
-                                {status === 'Sending...' ? 'Sending...' : 'Send File'}
-                            </button>
+                            </div>
                         </div>
-                    </div>
-                </>
-            )}
+                    </>
+                )}
+            </div>
         </div>
     );
 }

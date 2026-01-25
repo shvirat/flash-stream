@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { P2PClient } from '../utils/peerClient';
-import { Copy, Clipboard as ClipboardIcon, Link, Check, ArrowRight, Users, Monitor, Radio, X, ChevronDown, ChevronUp } from 'lucide-react';
+import { Copy, Clipboard as ClipboardIcon, Link, Check, ArrowRight, Users, Monitor, Radio, X, ChevronDown, ChevronUp, RefreshCw } from 'lucide-react';
 import toast from 'react-hot-toast';
+import clsx from 'clsx';
 
 function PeerList({ peers, mode }) {
     const [isOpen, setIsOpen] = useState(false);
@@ -9,70 +10,33 @@ function PeerList({ peers, mode }) {
 
     useEffect(() => {
         function handleClickOutside(event) {
-            if (menuRef.current && !menuRef.current.contains(event.target)) {
-                setIsOpen(false);
-            }
+            if (menuRef.current && !menuRef.current.contains(event.target)) setIsOpen(false);
         }
         document.addEventListener("mousedown", handleClickOutside);
-        return () => {
-            document.removeEventListener("mousedown", handleClickOutside);
-        };
+        return () => document.removeEventListener("mousedown", handleClickOutside);
     }, []);
 
-    if (peers.length === 0) return <span>No Peers</span>;
+    if (peers.length === 0) return <span className="text-dim text-xs">Waiting for peers...</span>;
+    if (mode === 'client' || mode === 'bidirectional') return <span className="text-emerald-400 text-xs font-medium bg-emerald-500/10 px-2 py-1 rounded-full border border-emerald-500/20">Connected</span>;
 
-    // Client/Bidirectional Mode: Just show the partner ID
-    if (mode === 'client' || mode === 'bidirectional') {
-        return <span>Connected to: {peers[0]}</span>;
-    }
-
-    // Host/Bidirectional: Show collapsible menu
     return (
-        <div ref={menuRef} style={{ position: 'relative', display: 'inline-block' }}>
+        <div ref={menuRef} className="relative inline-block">
             <button
                 onClick={() => setIsOpen(!isOpen)}
-                style={{
-                    background: 'none',
-                    border: 'none',
-                    color: 'var(--text-dim)',
-                    cursor: 'pointer',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '0.5rem',
-                    fontSize: '0.9rem',
-                    padding: 0
-                }}
+                className="flex items-center gap-2 text-xs font-medium text-emerald-400 bg-emerald-500/10 px-3 py-1 rounded-full border border-emerald-500/20 hover:bg-emerald-500/20 transition-colors"
             >
                 <span>{peers.length} Peer{peers.length !== 1 ? 's' : ''} Connected</span>
-                {isOpen ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                {isOpen ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
             </button>
 
             {isOpen && (
-                <div style={{
-                    position: 'absolute',
-                    bottom: '120%',
-                    right: 0,
-                    background: '#161b22',
-                    border: '1px solid var(--border-color)',
-                    borderRadius: '6px',
-                    padding: '0.5rem',
-                    minWidth: '150px',
-                    boxShadow: '0 4px 12px rgba(0,0,0,0.5)',
-                    zIndex: 10
-                }}>
-                    <div style={{ padding: '0.5rem', borderBottom: '1px solid #30363d', fontWeight: '600', marginBottom: '0.5rem' }}>
+                <div className="absolute bottom-full right-0 mb-2 p-3 min-w-40 glass-card rounded-xl shadow-xl z-20 animate-fade-in border border-white/10">
+                    <div className="text-xs font-bold text-dim uppercase tracking-wider mb-2 pb-2 border-b border-white/10">
                         Connected Peers
                     </div>
-                    <div style={{ maxHeight: '200px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '0.2rem' }}>
+                    <div className="max-h-32 overflow-y-auto space-y-1">
                         {peers.map((peer, idx) => (
-                            <div key={idx} style={{
-                                padding: '0.3rem 0.5rem',
-                                background: '#0d1117',
-                                borderRadius: '4px',
-                                fontSize: '0.85rem',
-                                color: '#58a6ff',
-                                fontFamily: 'monospace'
-                            }}>
+                            <div key={idx} className="px-2 py-1.5 bg-white/5 rounded-lg font-mono text-xs text-blue-300">
                                 {peer}
                             </div>
                         ))}
@@ -91,16 +55,12 @@ function ClipboardSession({ mode, visible }) {
     const [peers, setPeers] = useState([]);
     const [copied, setCopied] = useState(false);
 
-    // Stable Refs
     const textRef = useRef('');
     const clientRef = useRef(new P2PClient());
 
     useEffect(() => {
         const client = clientRef.current;
-
-        // Mode-Specific Logic Wrapper
         const isHost = mode === 'host';
-        const isClient = mode === 'client';
 
         client.onStatus = (msg) => {
             setStatus(msg);
@@ -111,9 +71,6 @@ function ClipboardSession({ mode, visible }) {
             if (!isHost) {
                 setText(newText);
                 textRef.current = newText;
-                if (visible) {
-                    //   toast.success('Clipboard Updated'); 
-                }
             }
         };
 
@@ -129,22 +86,15 @@ function ClipboardSession({ mode, visible }) {
             setStatus('Ready');
         });
 
-        // No cleanup on unmount/invisible effectively, 
-        // but we do want to cleanup if the component truly unmounts (app navigation)
-        return () => {
-            client.destroy();
-        };
-    }, []); // Run once on mount
+        return () => client.destroy();
+    }, []);
 
     const handleConnect = () => {
         if (!connectId) return;
-
-        // In Client Mode, ensure we only connect to ONE host at a time
         if (mode === 'client') {
             clientRef.current.connections.forEach(c => c.close());
             clientRef.current.connections = [];
         }
-
         setStatus('Connecting...');
         clientRef.current.connect(connectId);
     };
@@ -153,8 +103,6 @@ function ClipboardSession({ mode, visible }) {
         const newText = e.target.value;
         setText(newText);
         textRef.current = newText;
-
-        // Broadcast
         clientRef.current.sendText(newText);
     };
 
@@ -170,107 +118,98 @@ function ClipboardSession({ mode, visible }) {
         toast.success('Content Copied');
     };
 
-    // Styling based on mode
-    const borderColor = mode === 'host' ? '#a371f7' : (mode === 'client' ? '#238636' : '#58a6ff');
-    const bgTint = mode === 'host' ? 'rgba(163, 113, 247, 0.03)' : (mode === 'client' ? 'rgba(35, 134, 54, 0.03)' : 'rgba(88, 166, 255, 0.03)');
+    const accentColor = mode === 'host' ? 'purple' : (mode === 'client' ? 'emerald' : 'blue');
 
     return (
-        <div style={{ display: visible ? 'block' : 'none' }}>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '2rem' }}>
-
+        <div className={clsx("animate-fade-in", visible ? "block" : "hidden")}>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
                 {mode !== 'client' && (
-                    <div style={{ background: '#0d1117', padding: '1rem', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
-                        <label style={{ fontSize: '0.8rem', color: 'var(--text-dim)', display: 'block', marginBottom: '0.5rem' }}>
-                            {mode === 'host' ? 'HOST ROOM CODE' : 'YOUR ID'}
+                    <div className="glass-card p-4 rounded-xl border border-white/10 bg-white/5">
+                        <label className={`text-xs text-${accentColor}-300 font-bold uppercase tracking-wider mb-2 block`}>
+                            {mode === 'host' ? 'Host Code' : 'Your ID'}
                         </label>
-                        <div style={{ display: 'flex', gap: '0.5rem' }}>
-                            <code style={{ flex: 1, color: borderColor, fontSize: '1.1rem' }}>{myId || '...'}</code>
-                            <button onClick={copyId} style={{ padding: '0.2rem 0.5rem', height: 'auto' }}>
-                                {copied ? <Check size={16} /> : <Copy size={16} />}
+                        <div className="flex gap-2">
+                            <code className={`flex-1 text-lg font-mono p-2 bg-black/30 rounded-lg text-${accentColor}-400`}>
+                                {myId || '...'}
+                            </code>
+                            <button onClick={copyId} className="p-2 hover:bg-white/10 rounded-lg transition-colors text-dim hover:text-white">
+                                {copied ? <Check size={18} className="text-green-500" /> : <Copy size={18} />}
                             </button>
                         </div>
                     </div>
                 )}
 
                 {mode !== 'host' && (
-                    <div style={{ background: '#0d1117', padding: '1rem', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
-                        <label style={{ fontSize: '0.8rem', color: 'var(--text-dim)', display: 'block', marginBottom: '0.5rem' }}>
-                            {mode === 'client' ? 'ENTER HOST CODE' : 'CONNECT TO PARTNER'}
+                    <div className="glass-card p-4 rounded-xl border border-white/10 bg-white/5">
+                        <label className={`text-xs text-${accentColor}-300 font-bold uppercase tracking-wider mb-2 block`}>
+                            {mode === 'client' ? 'Enter Host Code' : 'Connect to Peer'}
                         </label>
-                        <div style={{ display: 'flex', gap: '0.5rem' }}>
+                        <div className="flex gap-2">
                             <input
                                 value={connectId}
                                 onChange={(e) => setConnectId(e.target.value.toUpperCase())}
-                                placeholder="Paste ID here"
+                                placeholder="PASTE CODE"
                                 maxLength={6}
-                                style={{ flex: 1, background: 'transparent', border: 'none', borderBottom: '1px solid #30363d', borderRadius: 0, padding: '0 0 0.5rem 0', fontFamily: 'monospace', textTransform: 'uppercase' }}
+                                className="flex-1 min-w-0 bg-black/30 border border-white/10 rounded-lg px-3 py-2 font-mono uppercase text-white placeholder-white/20 focus:border-white/30 outline-none"
                                 onKeyDown={(e) => e.key === 'Enter' && handleConnect()}
                             />
                             <button
                                 onClick={handleConnect}
-                                style={{ padding: '0.2rem 0.5rem', height: 'auto', background: '#58a6ff', borderColor: 'transparent' }}
+                                className={`p-2 rounded-lg transition-colors bg-${accentColor}-500 hover:bg-${accentColor}-400 text-white shadow-lg`}
                             >
-                                <ArrowRight size={16} />
+                                <ArrowRight size={18} />
                             </button>
                         </div>
                     </div>
                 )}
             </div>
 
-            <div style={{ position: 'relative' }}>
+            <div className="relative group">
                 {mode === 'client' && (
-                    <div style={{
-                        position: 'absolute', top: '-25px', left: 0,
-                        fontSize: '0.8rem', color: 'var(--text-dim)',
-                        display: 'flex', alignItems: 'center', gap: '0.5rem'
-                    }}>
-                        <Monitor size={14} /> Read-Only View
-                    </div>
+                    <div className="absolute top-8 left-0 right-0 h-1 bg-emerald-500/50 z-10 animate-pulse"></div>
                 )}
-                <textarea
-                    value={text}
-                    onChange={handleTextChange}
-                    readOnly={mode === 'client'}
-                    placeholder={mode === 'client' ? "Waiting for host updates..." : "Type or paste here to sync instantly..."}
-                    style={{
-                        width: '100%',
-                        minHeight: '300px',
-                        background: '#0d1117',
-                        borderColor: borderColor,
-                        backgroundColor: bgTint,
-                        borderRadius: '8px',
-                        padding: '1.5rem',
-                        fontSize: '1.1rem',
-                        fontFamily: 'monospace',
-                        color: mode === 'client' ? '#8b949e' : '#c9d1d9',
-                        resize: 'vertical',
-                        lineHeight: '1.6',
-                        borderWidth: '1px',
-                        transition: 'all 0.3s ease'
-                    }}
-                />
-                <button
-                    onClick={copyContent}
-                    style={{
-                        position: 'absolute',
-                        top: '1rem',
-                        right: '1rem',
-                        background: 'rgba(56, 139, 253, 0.15)',
-                        color: '#58a6ff',
-                        border: '1px solid rgba(56, 139, 253, 0.4)',
-                        backdropFilter: 'blur(4px)'
-                    }}
-                >
-                    <Copy size={16} style={{ marginRight: '0.5rem' }} /> Copy
-                </button>
+                <div className="absolute -inset-0.5 bg-linear-to-r from-blue-500 to-purple-500 rounded-2xl opacity-20 group-hover:opacity-40 transition duration-500 blur"></div>
+                <div className="relative bg-bg-surface rounded-xl overflow-hidden border border-white/10">
+                    <div className="bg-black/40 px-4 py-2 flex items-center justify-between border-b border-white/5">
+                        <div className="flex gap-2">
+                            <div className="w-3 h-3 rounded-full bg-red-500/50"></div>
+                            <div className="w-3 h-3 rounded-full bg-yellow-500/50"></div>
+                            <div className="w-3 h-3 rounded-full bg-green-500/50"></div>
+                        </div>
+                        <span className="text-xs text-dim font-mono uppercase tracking-widest">
+                            {mode === 'client' ? 'READ ONLY' : 'EDITOR'}
+                        </span>
+                        <button
+                            onClick={copyContent}
+                            className="text-xs flex items-center gap-1 text-dim hover:text-white transition-colors"
+                        >
+                            <Copy size={12} /> COPY
+                        </button>
+                    </div>
+                    <textarea
+                        value={text}
+                        onChange={handleTextChange}
+                        readOnly={mode === 'client'}
+                        placeholder={mode === 'client' ? "Waiting for host updates..." : "Type or paste here to sync instantly..."}
+                        className="w-full h-64 sm:h-80 bg-transparent p-4 font-mono text-sm sm:text-base text-gray-300 focus:outline-none resize-none"
+                        spellCheck={false}
+                    />
+                </div>
             </div>
 
-            <div style={{ marginTop: '1rem', display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem', color: 'var(--text-dim)' }}>
-                <span>{status}</span>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                    <Users size={16} />
-                    <PeerList peers={peers} mode={mode} />
+            <div className="mt-4 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 text-sm">
+                <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/5 border border-white/5">
+                    <span
+                        className={clsx("w-2 h-2 rounded-full", {
+                            'bg-emerald-500 shadow-[0_0_8px_#10b981]': status === 'Ready' || status.includes('Connected'),
+                            'bg-yellow-500': status === 'Initializing...' || status === 'Connecting...',
+                            'bg-red-500': status.includes('Error') || status === 'Disconnected'
+                        })}
+                    />
+                    <span className="text-dim text-xs font-medium uppercase tracking-wide">{status}</span>
                 </div>
+
+                <PeerList peers={peers} mode={mode} />
             </div>
         </div>
     );
@@ -279,38 +218,61 @@ function ClipboardSession({ mode, visible }) {
 function Clipboard() {
     const [activeMode, setActiveMode] = useState('bidirectional');
 
+    const getModeStyles = () => {
+        switch (activeMode) {
+            case 'host': return { color: 'text-purple-400', bg: 'bg-purple-500/20', glow: 'bg-purple-500/10', border: 'border-purple-500/30' };
+            case 'client': return { color: 'text-emerald-400', bg: 'bg-emerald-500/20', glow: 'bg-emerald-500/10', border: 'border-emerald-500/30' };
+            default: return { color: 'text-blue-400', bg: 'bg-blue-500/20', glow: 'bg-blue-500/10', border: 'border-blue-500/30' };
+        }
+    };
+
+    const styles = getModeStyles();
+
     return (
-        <div className="card" style={{ maxWidth: '800px' }}>
-            <h2 style={{ marginBottom: '1.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                <ClipboardIcon size={24} color="#a371f7" />
-                Shared Clipboard
-            </h2>
+        <div className="w-full max-w-4xl mx-auto px-4">
+            <div className={clsx("glass-panel p-6 sm:p-8 rounded-2xl animate-fade-in relative overflow-hidden transition-colors duration-500", styles.border)}>
+                {/* Decorative Glow */}
+                <div className={clsx("absolute top-0 right-0 w-96 h-96 rounded-full blur-3xl -z-10 -translate-y-1/2 translate-x-1/2 transition-colors duration-500", styles.glow)}></div>
 
-            {/* Mode Switcher */}
-            <div style={{ display: 'flex', gap: '1rem', marginBottom: '2rem', padding: '0.5rem', background: '#0d1117', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
-                <button
-                    onClick={() => setActiveMode('bidirectional')}
-                    style={{ flex: 1, background: activeMode === 'bidirectional' ? '#21262d' : 'transparent', border: 'none', color: activeMode === 'bidirectional' ? '#58a6ff' : 'var(--text-dim)' }}
-                >
-                    Bidirectional
-                </button>
-                <button
-                    onClick={() => setActiveMode('host')}
-                    style={{ flex: 1, background: activeMode === 'host' ? '#21262d' : 'transparent', border: 'none', color: activeMode === 'host' ? '#a371f7' : 'var(--text-dim)' }}
-                >
-                    Host Mode
-                </button>
-                <button
-                    onClick={() => setActiveMode('client')}
-                    style={{ flex: 1, background: activeMode === 'client' ? '#21262d' : 'transparent', border: 'none', color: activeMode === 'client' ? '#238636' : 'var(--text-dim)' }}
-                >
-                    Client Mode
-                </button>
+                <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-6 mb-8">
+                    <div className="flex items-center gap-3">
+                        <div className={clsx("p-3 rounded-xl transition-colors duration-300", styles.bg)}>
+                            <ClipboardIcon size={24} className={clsx("transition-colors duration-300", styles.color)} />
+                        </div>
+                        <div>
+                            <h2 className="text-2xl font-bold text-white">Shared Clipboard</h2>
+                            <p className="text-dim text-sm">Sync text across devices instantly</p>
+                        </div>
+                    </div>
+
+                    <div className="flex p-1 rounded-xl bg-black/40 border border-white/10 w-full justify-between md:w-auto overflow-x-auto touch-scroll-hide">
+                        {[
+                            { id: 'bidirectional', label: 'Peer-to-Peer', activeClass: 'bg-blue-600' },
+                            { id: 'host', label: 'Host Mode', activeClass: 'bg-purple-600' },
+                            { id: 'client', label: 'Client Mode', activeClass: 'bg-emerald-600' }
+                        ].map((mode) => (
+                            <button
+                                key={mode.id}
+                                onClick={() => setActiveMode(mode.id)}
+                                className={clsx(
+                                    "px-4 py-2 rounded-lg text-sm font-medium transition-all whitespace-nowrap",
+                                    activeMode === mode.id
+                                        ? clsx("text-white shadow-lg", mode.activeClass)
+                                        : "text-dim hover:text-white hover:bg-white/5"
+                                )}
+                            >
+                                {mode.label}
+                            </button>
+                        ))}
+                    </div>
+                </div>
+
+                <div className="transition-opacity duration-300">
+                    <ClipboardSession mode="bidirectional" visible={activeMode === 'bidirectional'} />
+                    <ClipboardSession mode="host" visible={activeMode === 'host'} />
+                    <ClipboardSession mode="client" visible={activeMode === 'client'} />
+                </div>
             </div>
-
-            <ClipboardSession mode="bidirectional" visible={activeMode === 'bidirectional'} />
-            <ClipboardSession mode="host" visible={activeMode === 'host'} />
-            <ClipboardSession mode="client" visible={activeMode === 'client'} />
         </div>
     );
 }

@@ -1,0 +1,17 @@
+{
+    "name": "FlashStream",
+    "short_name": "FlashStream",
+    "start_url": ".",
+    "display": "standalone",
+    "background_color": "#0d1117",
+    "theme_color": "#0d1117",
+    "description": "Peer-to-Peer file transfer. No limits. No servers.",
+    "icons": [
+        {
+            "src": "/vite.svg",
+            "sizes": "any",
+            "type": "image/svg+xml",
+            "purpose": "any maskable"
+        }
+    ]
+}
