@@ -13,21 +13,22 @@ const port = process.env.PORT || 9000;
 // Security & CORS
 app.use(helmet());
 app.use(cors());
+app.enable('trust proxy'); // Critical for Render/Heroku behind load balancers
 
 // Basic health check
 app.get('/', (req, res) => {
-    res.send('P2P File Transfer Signaling Server is running on a single port!');
+    res.send('P2P Signaling Server Running (Use /peerjs for WebSocket)');
 });
 
 // PeerJS Server
-// Mounts on /myapp path. The client connects to host:port/myapp
 const peerServer = ExpressPeerServer(server, {
     debug: true,
     path: '/',
+    proxied: true, // Required for SSL/Secure connections behind proxy
     allow_discovery: true
 });
 
-app.use('/myapp', peerServer);
+app.use('/peerjs', peerServer);
 
 server.listen(port, () => {
     console.log(`Server (Express + PeerJS) running on port ${port}`);
