@@ -10,13 +10,3 @@ services:
       - key: PORT
         value: 10000
     autoDeploy: false
-
-  # Frontend: Static Site (Optional, if you want to host frontend on Render too)
-  - type: web
-    name: p2p-frontend
-    env: static
-    buildCommand: cd frontend && npm install && npm run build
-    staticPublishPath: frontend/dist
-    envVars:
-      - key: NODE_VERSION
-        value: 20.11.0

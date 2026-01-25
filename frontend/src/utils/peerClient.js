@@ -26,15 +26,22 @@ export class P2PClient {
             // Determine Configuration based on Environment
             const isProduction = window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1';
 
+            const iceServers = [
+                { urls: 'stun:stun.l.google.com:19302' },
+                { urls: 'stun:global.stun.twilio.com:3478' }
+            ];
+
             const config = isProduction ? {
-                host: 'your-backend-app.onrender.com', // User puts their URL here
+                host: 'p2p-signaling-server-spb6.onrender.com',
                 port: 443,
                 secure: true,
-                path: '/myapp'
+                path: '/peerjs',
+                config: { iceServers }
             } : {
                 host: 'localhost',
                 port: 9000,
-                path: '/myapp'
+                path: '/peerjs',
+                config: { iceServers }
             };
 
             this.peer = new Peer(shortId, config);
@@ -66,7 +73,17 @@ export class P2PClient {
             return;
         }
 
-        const conn = this.peer.connect(remotePeerId, { reliable: true });
+        const conn = this.peer.connect(remotePeerId); // Removed { reliable: true } which can cause hangs
+
+        // Connection Timeout Safety
+        setTimeout(() => {
+            if (conn && !conn.open) {
+                console.warn('Connection timed out');
+                conn.close();
+                this.onStatus('Connection Timed Out. Retrying...');
+            }
+        }, 15000);
+
         this.handleConnection(conn);
     }
 

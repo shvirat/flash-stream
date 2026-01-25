@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { P2PClient } from '../utils/peerClient';
-import { Copy, Check, File, UploadCloud, Loader2 } from 'lucide-react';
+import { Copy, Check, File, UploadCloud, Loader2, RefreshCw } from 'lucide-react';
 import toast from 'react-hot-toast';
 import clsx from 'clsx';
 
@@ -45,8 +45,9 @@ function Sender() {
             // Persistence: Save ID
             localStorage.setItem('senderId', id);
             setStatus('Waiting for connection...');
-        }).catch(() => {
-            toast.error('Failed to initialize connection');
+        }).catch((err) => {
+            console.error('Init failed:', err);
+            toast.error(`Failed: ${err.type || 'Connection Error'}`);
         });
 
         // Global Drag & Drop events
@@ -84,6 +85,50 @@ function Sender() {
         } catch (err) {
             toast.error('Failed to copy');
         }
+    };
+
+    const generateNewId = () => {
+        if (isConnected) {
+            toast.error('Cannot change ID while connected');
+            return;
+        }
+
+        // Cleanup old peer
+        if (clientRef.current.peer) {
+            clientRef.current.destroy();
+        }
+
+        setPeerId('');
+        localStorage.removeItem('senderId');
+
+        // Re-init with new random ID
+        clientRef.current = new P2PClient();
+        const client = clientRef.current;
+
+        // Restore event handlers
+        client.onStatus = (msg) => {
+            setStatus(msg);
+            if (msg === 'Connected') {
+                setIsConnected(true);
+                toast.success('Receiver Connected!');
+            }
+            if (msg === 'File Sent!') toast.success('File Sent Successfully!');
+            if (msg === 'Disconnected' || msg.startsWith('Error')) {
+                setIsConnected(false);
+                toast.error(msg);
+            }
+        };
+        client.onProgress = (p) => setProgress(p);
+
+        client.init(true, null, 1).then((id) => {
+            setPeerId(id);
+            localStorage.setItem('senderId', id);
+            setStatus('Waiting for connection...');
+            toast.success('New ID Generated');
+        }).catch((err) => {
+            console.error('Init failed:', err);
+            toast.error(`Failed: ${err.type || 'Connection Error'}`);
+        });
     };
 
     const handleFileChange = (e) => {
@@ -162,6 +207,9 @@ function Sender() {
                             </div>
                             <button onClick={copyToClipboard} title="Copy ID">
                                 {copied ? <Check size={20} color="#238636" /> : <Copy size={20} />}
+                            </button>
+                            <button onClick={generateNewId} title="Generate New ID" disabled={isConnected}>
+                                <RefreshCw size={20} />
                             </button>
                         </div>
                     </div>
