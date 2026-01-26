@@ -14,9 +14,10 @@ function Sender() {
     const [isConnected, setIsConnected] = useState(false);
 
     // Stable client ref
-    const clientRef = useRef(new P2PClient());
+    const clientRef = useRef(null);
 
     useEffect(() => {
+        if (!clientRef.current) clientRef.current = new P2PClient();
         const client = clientRef.current;
         let savedId = localStorage.getItem('senderId');
         if (savedId && savedId.length > 8) savedId = null;
@@ -51,15 +52,35 @@ function Sender() {
         const handleDragLeave = (e) => { e.preventDefault(); setIsDragging(false); };
         const handleDrop = (e) => { e.preventDefault(); setIsDragging(false); };
 
+        const handlePaste = (e) => {
+            const items = e.clipboardData?.items;
+            if (items) {
+                for (let i = 0; i < items.length; i++) {
+                    if (items[i].kind === 'file') {
+                        const pastedFile = items[i].getAsFile();
+                        if (pastedFile) {
+                            if (pastedFile.size > 500 * 1024 * 1024) {
+                                toast.error('File too large! Max 500MB for beta.');
+                            }
+                            setFile(pastedFile);
+                            toast.success('Pasted File Selected');
+                        }
+                    }
+                }
+            }
+        };
+
         window.addEventListener('dragover', handleDragOver);
         window.addEventListener('dragleave', handleDragLeave);
         window.addEventListener('drop', handleDrop);
+        window.addEventListener('paste', handlePaste);
 
         return () => {
             if (client.peer) client.peer.destroy();
             window.removeEventListener('dragover', handleDragOver);
             window.removeEventListener('dragleave', handleDragLeave);
             window.removeEventListener('drop', handleDrop);
+            window.removeEventListener('paste', handlePaste);
         };
     }, []);
 
@@ -84,7 +105,8 @@ function Sender() {
         setPeerId('');
         localStorage.removeItem('senderId');
 
-        clientRef.current = new P2PClient();
+        if (!clientRef.current) clientRef.current = new P2PClient();
+        // clientRef.current = new P2PClient(); // Re-use instance or re-init if null
         const client = clientRef.current;
 
         client.onStatus = (msg) => {
@@ -107,7 +129,14 @@ function Sender() {
     };
 
     const handleFileChange = (e) => {
-        if (e.target.files?.[0]) setFile(e.target.files[0]);
+        if (e.target.files?.[0]) {
+            const selectedFile = e.target.files[0];
+            if (selectedFile.size > 500 * 1024 * 1024) {
+                toast.error('File too large! Max 500MB for beta.');
+                // Optional: setFile(null) or allow it with warning
+            }
+            setFile(selectedFile);
+        }
     };
 
     const handleDropZone = (e) => {
@@ -115,7 +144,11 @@ function Sender() {
         e.stopPropagation();
         setIsDragging(false);
         if (e.dataTransfer.files?.[0]) {
-            setFile(e.dataTransfer.files[0]);
+            const selectedFile = e.dataTransfer.files[0];
+            if (selectedFile.size > 500 * 1024 * 1024) {
+                toast.error('File too large! Max 500MB for beta.');
+            }
+            setFile(selectedFile);
             toast.success('File Selected');
         }
     };
@@ -235,7 +268,7 @@ function Sender() {
                                             {isDragging ? 'Drop it here!' : 'Choose a file'}
                                         </h3>
                                         <p className="text-dim text-sm max-w-xs mx-auto">
-                                            Drag & drop your file here, or click to browse.
+                                            Drag & drop your file here, click to browse, or paste from clipboard.
                                         </p>
                                     </div>
                                 )}

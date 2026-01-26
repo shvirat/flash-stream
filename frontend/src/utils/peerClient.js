@@ -8,8 +8,6 @@ export class P2PClient {
         this.onProgress = () => { };
         this.onStatus = () => { };
         this.onFileReceived = () => { };
-        this.onStatus = () => { };
-        this.onFileReceived = () => { };
         this.onTextReceived = () => { };
         this.onPeerJoin = () => { };
         this.connections = []; // Connection Pool
@@ -31,18 +29,20 @@ export class P2PClient {
                 { urls: 'stun:global.stun.twilio.com:3478' }
             ];
 
-            const config = isProduction ? {
+            const signalingServer = {
                 host: 'p2p-signaling-server-spb6.onrender.com',
                 port: 443,
                 secure: true,
-                path: '/peerjs',
-                config: { iceServers }
-            } : {
+                path: '/peerjs'
+            };
+
+            const localServer = {
                 host: 'localhost',
                 port: 9000,
-                path: '/peerjs',
-                config: { iceServers }
+                path: '/peerjs'
             };
+
+            const config = isProduction ? { ...signalingServer, config: { iceServers } } : { ...localServer, config: { iceServers } };
 
             this.peer = new Peer(shortId, config);
 

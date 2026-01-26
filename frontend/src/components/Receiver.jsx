@@ -19,9 +19,10 @@ function Receiver() {
     const [progress, setProgress] = useState(0);
     const [isConnected, setIsConnected] = useState(false);
 
-    const clientRef = useRef(new P2PClient());
+    const clientRef = useRef(null);
 
     useEffect(() => {
+        if (!clientRef.current) clientRef.current = new P2PClient();
         const client = clientRef.current;
         client.onStatus = (msg) => {
             setStatus(msg);

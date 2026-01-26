@@ -56,9 +56,10 @@ function ClipboardSession({ mode, visible }) {
     const [copied, setCopied] = useState(false);
 
     const textRef = useRef('');
-    const clientRef = useRef(new P2PClient());
+    const clientRef = useRef(null);
 
     useEffect(() => {
+        if (!clientRef.current) clientRef.current = new P2PClient();
         const client = clientRef.current;
         const isHost = mode === 'host';
 

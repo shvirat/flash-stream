@@ -27,5 +27,6 @@ Thumbs.db
 .idea/
 
 # Optional: coverage or testing outputs
+**/public/temp/**
 coverage/
 recovery/
