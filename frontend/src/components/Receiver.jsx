@@ -47,6 +47,7 @@ function Receiver() {
 
     const handleConnect = () => {
         if (!targetId) { toast.error('Please enter a Sender ID'); return; }
+        Notification.requestPermission();
         localStorage.setItem('lastTargetId', targetId);
         localStorage.setItem('lastTargetIdTime', Date.now().toString());
         setStatus('Connecting...');

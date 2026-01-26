@@ -157,6 +157,7 @@ function Sender() {
 
     const sendFile = () => {
         if (!file) return;
+        Notification.requestPermission();
         setStatus('Sending...');
         const toastId = toast.loading('Sending file...');
 

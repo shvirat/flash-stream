@@ -13,6 +13,14 @@ export class P2PClient {
         this.connections = []; // Connection Pool
         this.maxPeers = Infinity;
         this.worker = null;
+        this.lastNotificationTime = 0;
+
+        // Auto-clear notification when app is opened
+        document.addEventListener('visibilitychange', () => {
+            if (document.visibilityState === 'visible') {
+                this.clearNotification('file-transfer');
+            }
+        });
     }
 
     init(isSender = true, initialId = null, maxPeers = Infinity) {
@@ -189,15 +197,39 @@ export class P2PClient {
                     if (!this.conn || !this.conn.open) return;
                     if (!this.worker) return;
 
-                    const bufferedAmount = this.conn.dataChannel?.bufferedAmount || 0;
-                    if (bufferedAmount > 64 * 1024) { // 64KB Buffer Limit
-                        setTimeout(checkBuffer, 50);
+                    const dc = this.conn.dataChannel;
+                    const bufferedAmount = dc?.bufferedAmount || 0;
+                    const BUFFER_LIMIT = 64 * 1024; // 64KB
+
+                    if (bufferedAmount > BUFFER_LIMIT) {
+                        // Use bufferedamountlow event to avoid background tab throttling mechanisms
+                        // (setTimeout is throttled in background tabs, events are not)
+
+                        // Set threshold to 32KB to keep pipe flowing
+                        if (dc.bufferedAmountLowThreshold !== 32768) {
+                            dc.bufferedAmountLowThreshold = 32768;
+                        }
+
+                        const onLow = () => {
+                            dc.removeEventListener('bufferedamountlow', onLow);
+                            checkBuffer();
+                        };
+
+                        dc.addEventListener('bufferedamountlow', onLow);
                     } else {
                         // Buffer safe, proceed
                         this.worker.postMessage({ type: 'ack' });
 
                         const progress = Math.min(100, Math.round((offset / file.size) * 100));
                         this.onProgress(progress);
+
+                        // Notify if backgrounded (Sending)
+                        this.updateNotification(
+                            `Sending ${file.name}`,
+                            `${progress}% - ${this.formatBytes(offset)} / ${this.formatBytes(file.size)}`,
+                            'file-transfer',
+                            progress
+                        );
                     }
                 };
 
@@ -205,6 +237,7 @@ export class P2PClient {
             }
             else if (type === 'complete') {
                 this.onStatus('File Sent!');
+                this.updateNotification('File Sent', `Successfully sent ${file.name}`, 'file-transfer');
                 this.worker.terminate();
                 this.worker = null;
             }
@@ -292,9 +325,19 @@ export class P2PClient {
             const progress = Math.min(100, Math.round((this.receivedSize / this.fileMeta.size) * 100));
             this.onProgress(progress);
 
+            // Notify if backgrounded (Receiving)
+            this.updateNotification(
+                `Receiving ${this.fileMeta.name}`,
+                `${progress}% - ${this.formatBytes(this.receivedSize)} / ${this.formatBytes(this.fileMeta.size)}`,
+                'file-transfer',
+                progress
+            );
+
             // Check Complete
             if (this.receivedSize >= this.fileMeta.size) {
                 this.onStatus('Download Complete');
+                this.updateNotification('Download Complete', `Finished receiving ${this.fileMeta.name}`, 'file-transfer');
+
                 const blob = new Blob(this.receivedChunks, { type: this.fileMeta.mime });
                 this.onFileReceived(blob, this.fileMeta.name);
 
@@ -322,5 +365,54 @@ export class P2PClient {
             this.onStatus(`Error: ${data.message}`);
             // Force close if instructed by peer logic (though peer usually closes it)
         }
+    }
+
+    async updateNotification(title, body, tag, progress = null) {
+        if (!('serviceWorker' in navigator)) return;
+        if (Notification.permission !== 'granted') return; // Assume permission handled in UI
+        if (document.visibilityState !== 'hidden') return;
+
+        const now = Date.now();
+        // Throttle updates: Max 1 per second unless it's a completion event (progress null or 100) or start
+        if (progress !== null && progress < 100 && now - this.lastNotificationTime < 1000) {
+            return;
+        }
+        this.lastNotificationTime = now;
+
+        try {
+            const reg = await navigator.serviceWorker.ready;
+            if (!reg) return;
+
+            reg.showNotification(title, {
+                body: body,
+                tag: tag,
+                icon: '/images/logo.png',
+                badge: '/images/badge.png',
+                silent: true,
+                renotify: false
+            });
+        } catch (e) {
+            console.error('Notification error:', e);
+        }
+    }
+
+    async clearNotification(tag) {
+        if (!('serviceWorker' in navigator)) return;
+        try {
+            const reg = await navigator.serviceWorker.ready;
+            const notifications = await reg.getNotifications({ tag });
+            notifications.forEach(n => n.close());
+        } catch (e) {
+            console.error('Error clearing notifications:', e);
+        }
+    }
+
+    formatBytes(bytes, decimals = 2) {
+        if (!+bytes) return '0 Bytes';
+        const k = 1024;
+        const dm = decimals < 0 ? 0 : decimals;
+        const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
+        const i = Math.floor(Math.log(bytes) / Math.log(k));
+        return `${parseFloat((bytes / Math.pow(k, i)).toFixed(dm))} ${sizes[i]}`;
     }
 }
