@@ -2,7 +2,7 @@ import { BrowserRouter as Router, Routes, Route, Link, useLocation } from 'react
 import Sender from './components/Sender';
 import Receiver from './components/Receiver';
 import Clipboard from './components/Clipboard';
-import { Share2, DownloadCloud, ArrowLeft, Clipboard as ClipboardIcon, Smartphone, Monitor, Zap } from 'lucide-react';
+import { Share2, DownloadCloud, ArrowLeft, Clipboard as ClipboardIcon, Smartphone, Monitor, Zap, Share, Share2Icon, UploadCloud, Send, Download, Upload } from 'lucide-react';
 import { Toaster } from 'react-hot-toast';
 
 function Landing() {
@@ -26,7 +26,7 @@ function Landing() {
                 <Link to="/send" className="no-underline group">
                     <div className="glass-card h-full p-8 rounded-2xl flex flex-col items-center text-center cursor-pointer group-hover:border-blue-500/50 transition-colors">
                         <div className="p-4 bg-blue-500/10 rounded-full mb-6 group-hover:scale-110 transition-transform">
-                            <Share2 size={40} className="text-blue-400" />
+                            <Upload size={40} className="text-blue-400" />
                         </div>
                         <h3 className="text-xl font-bold mb-2 text-white">Send Files</h3>
                         <p className="text-dim text-sm">Transfer photos, videos, or documents to any device nearby.</p>
@@ -36,7 +36,7 @@ function Landing() {
                 <Link to="/receive" className="no-underline group">
                     <div className="glass-card h-full p-8 rounded-2xl flex flex-col items-center text-center cursor-pointer group-hover:border-emerald-500/50 transition-colors">
                         <div className="p-4 bg-emerald-500/10 rounded-full mb-6 group-hover:scale-110 transition-transform">
-                            <DownloadCloud size={40} className="text-emerald-400" />
+                            <Download size={40} className="text-emerald-400" />
                         </div>
                         <h3 className="text-xl font-bold mb-2 text-white">Receive Files</h3>
                         <p className="text-dim text-sm">Securely download shared files directly to your device.</p>

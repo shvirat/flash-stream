@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { P2PClient } from '../utils/peerClient';
-import { Download, Link, FileCheck, Loader2, ArrowRight, ShieldCheck } from 'lucide-react';
+import { Download, Link, FileCheck, Loader2, ArrowRight, ShieldCheck, DownloadCloud } from 'lucide-react';
 import toast from 'react-hot-toast';
 import clsx from 'clsx';
 
@@ -31,7 +31,8 @@ function Receiver() {
         };
         client.onProgress = (p) => setProgress(p);
         client.onFileReceived = (blob, name) => {
-            toast.success(`Received ${name}!`);
+            const shortName = name.length > 20 ? name.substring(0, 15) + '...' + name.substring(name.lastIndexOf('.')) : name;
+            toast.success(`Received ${shortName}!`);
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a'); a.href = url; a.download = name;
             document.body.appendChild(a); a.click(); document.body.removeChild(a);
@@ -64,7 +65,7 @@ function Receiver() {
 
                 <div className="flex items-center gap-3 mb-8">
                     <div className="p-3 bg-emerald-500/20 rounded-xl">
-                        <Download size={24} className="text-emerald-400" />
+                        <DownloadCloud size={24} className="text-emerald-400" />
                     </div>
                     <div>
                         <h2 className="text-2xl font-bold text-white">Receive File</h2>
@@ -91,7 +92,7 @@ function Receiver() {
                             onClick={handleConnect}
                             disabled={isConnected || !targetId}
                             className={clsx(
-                                "px-8 py-4 rounded-xl font-bold flex items-center justify-center gap-2 transition-all min-w-[140px]",
+                                "px-8 py-4 rounded-xl font-bold flex items-center justify-center gap-2 transition-all min-w-35cone",
                                 isConnected || !targetId
                                     ? "bg-white/5 text-dim cursor-not-allowed"
                                     : "bg-emerald-600 hover:bg-emerald-500 text-white shadow-lg hover:shadow-emerald-500/25 active:scale-95"
@@ -109,8 +110,9 @@ function Receiver() {
                 {progress > 0 && (
                     <div className="mt-8 animate-fade-in p-6 bg-black/20 rounded-xl border border-white/5">
                         <div className="flex justify-between items-center mb-4 text-sm font-medium">
-                            <span className="text-emerald-300 flex items-center gap-2">
-                                <Loader2 size={16} className="animate-spin" /> Downloading...
+                            <span className={clsx("flex items-center gap-2", progress === 100 ? "text-emerald-400" : "text-emerald-300")}>
+                                {progress < 100 && <Loader2 size={16} className="animate-spin" />}
+                                {progress === 100 ? 'Download Complete' : 'Downloading...'}
                             </span>
                             <div className="flex items-center gap-4">
                                 <span className="text-white font-mono text-lg">{progress}%</span>

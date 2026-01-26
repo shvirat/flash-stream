@@ -245,7 +245,9 @@ function Sender() {
                         {progress > 0 && (
                             <div className="mt-8 animate-fade-in">
                                 <div className="flex justify-between mb-2 text-sm font-medium">
-                                    <span className="text-blue-300">Transferring...</span>
+                                    <span className={clsx("transition-colors", progress === 100 ? "text-emerald-400" : "text-blue-300")}>
+                                        {progress === 100 ? 'File Sent!' : 'Transferring...'}
+                                    </span>
                                     <span className="text-white font-mono">{progress}%</span>
                                 </div>
                                 <div className="w-full h-3 bg-white/5 rounded-full overflow-hidden border border-white/5">

@@ -17,7 +17,7 @@ function PeerList({ peers, mode }) {
     }, []);
 
     if (peers.length === 0) return <span className="text-dim text-xs">Waiting for peers...</span>;
-    if (mode === 'client' || mode === 'bidirectional') return <span className="text-emerald-400 text-xs font-medium bg-emerald-500/10 px-2 py-1 rounded-full border border-emerald-500/20">Connected</span>;
+    if (mode === 'client' || mode === 'bidirectional') return <span className="text-emerald-400 text-xs font-medium bg-emerald-500/10 px-2 py-1 rounded-full border border-emerald-500/20">Connected to {peers}</span>;
 
     return (
         <div ref={menuRef} className="relative inline-block">
@@ -63,7 +63,16 @@ function ClipboardSession({ mode, visible }) {
         const isHost = mode === 'host';
 
         client.onStatus = (msg) => {
-            setStatus(msg);
+            // Smart Status for Clipboard: Revert to 'Ready' if we have active connections
+            const isError = msg.startsWith('Error') || msg === 'Connection Timed Out' || msg === 'Disconnected';
+            const hasActive = client.connections.some(c => c.open);
+
+            if (isError && hasActive) {
+                if (msg !== 'Disconnected') toast.error(msg); // Don't toast on simple disconnects if we have others
+                setStatus('Connected');
+            } else {
+                setStatus(msg);
+            }
             setPeers(client.connections.map(c => c.peer));
         };
 
@@ -150,12 +159,12 @@ function ClipboardSession({ mode, visible }) {
                                 onChange={(e) => setConnectId(e.target.value.toUpperCase())}
                                 placeholder="PASTE CODE"
                                 maxLength={6}
-                                className="flex-1 min-w-0 bg-black/30 border border-white/10 rounded-lg px-3 py-2 font-mono uppercase text-white placeholder-white/20 focus:border-white/30 outline-none"
+                                className="text-lg flex-1 min-w-0 bg-black/30 border border-white/10 rounded-lg px-2 py-2 font-mono uppercase text-white placeholder-white/20 focus:border-white/30 outline-none"
                                 onKeyDown={(e) => e.key === 'Enter' && handleConnect()}
                             />
                             <button
                                 onClick={handleConnect}
-                                className={`p-2 rounded-lg transition-colors bg-${accentColor}-500 hover:bg-${accentColor}-400 text-white shadow-lg`}
+                                className={`p-2 rounded-lg transition-colors bg-${accentColor}-600 hover:bg-${accentColor}-300 text-white shadow-lg cursor-pointer`}
                             >
                                 <ArrowRight size={18} />
                             </button>
@@ -245,7 +254,7 @@ function Clipboard() {
                         </div>
                     </div>
 
-                    <div className="flex p-1 rounded-xl bg-black/40 border border-white/10 w-full justify-between md:w-auto overflow-x-auto touch-scroll-hide">
+                    <div className="flex p-1 rounded-xl bg-black/40 border border-white/10 w-full justify-evenly md:w-auto overflow-x-auto">
                         {[
                             { id: 'bidirectional', label: 'Peer-to-Peer', activeClass: 'bg-blue-600' },
                             { id: 'host', label: 'Host Mode', activeClass: 'bg-purple-600' },

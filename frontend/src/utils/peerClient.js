@@ -55,6 +55,15 @@ export class P2PClient {
             this.peer.on('error', (err) => {
                 console.error('Peer error:', err);
                 this.onStatus('Error: ' + err.type);
+
+                // Fix for zombie connection: If connecting fails (e.g. wrong ID), cleanup the pending connection
+                if (['peer-unavailable', 'socket-error', 'browser-incompatible'].includes(err.type)) {
+                    if (this.conn && !this.conn.open) {
+                        this.connections = this.connections.filter(c => c !== this.conn);
+                        this.conn = null;
+                    }
+                }
+
                 reject(err);
             });
 
@@ -66,6 +75,15 @@ export class P2PClient {
 
     connect(remotePeerId) {
         if (!this.peer) return;
+
+        const targetId = remotePeerId.trim();
+
+        // Prevent self-connection
+        if (targetId === this.peerId) {
+            console.warn('Cannot connect to yourself');
+            this.onStatus('Error: Cannot connect to yourself');
+            return;
+        }
 
         // Prevent duplicate connections to same peer
         if (this.connections.some(c => c.peer === remotePeerId && c.open)) {
@@ -80,7 +98,7 @@ export class P2PClient {
             if (conn && !conn.open) {
                 console.warn('Connection timed out');
                 conn.close();
-                this.onStatus('Connection Timed Out. Retrying...');
+                this.onStatus('Connection Timed Out');
             }
         }, 15000);
 
@@ -248,7 +266,8 @@ export class P2PClient {
             this.fileMeta = data;
             this.receivedChunks = [];
             this.receivedSize = 0;
-            this.onStatus(`Receiving ${data.name}...`);
+            const truncate = (n) => n.length > 20 ? n.substring(0, 10) + '...' + n.substring(n.lastIndexOf('.')) : n;
+            this.onStatus(`Receiving ${truncate(data.name)}`);
         } else if (data.type === 'chunk') {
             if (!this.fileMeta) return; // Ignore chunks if no meta (e.g. cancelled or done)
 
