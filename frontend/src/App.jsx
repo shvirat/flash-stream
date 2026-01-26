@@ -24,12 +24,7 @@ function Landing() {
                     Transfer files of any size or sync your clipboard instantly across devices.
                     No clouds. No servers. Just direct connection.
                 </motion.p>
-                <motion.div
-                    variants={containerStagger}
-                    initial="hidden"
-                    animate="visible"
-                    className="flex flex-wrap justify-center gap-4 text-sm text-dim"
-                >
+                <motion.div className="flex flex-wrap justify-center gap-4 text-sm text-dim">
                     <motion.div variants={slideUp} className="flex items-center gap-1"><Zap size={16} className="text-yellow-400" /> Instant Speed</motion.div>
                     <motion.div variants={slideUp} className="flex items-center gap-1"><Monitor size={16} className="text-blue-400" /> Cross-Platform</motion.div>
                     <motion.div variants={slideUp} className="flex items-center gap-1"><Smartphone size={16} className="text-emerald-400" /> Mobile Ready</motion.div>

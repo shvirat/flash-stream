@@ -183,11 +183,25 @@ export class P2PClient {
                     data: data
                 });
 
-                // Flow Control: Tell worker to read next chunk ONLY after we sent this one
-                this.worker.postMessage({ type: 'ack' });
+                // Flow Control: Backpressure Handling
+                // Wait for buffer to drain before asking for next chunk
+                const checkBuffer = () => {
+                    if (!this.conn || !this.conn.open) return;
+                    if (!this.worker) return;
 
-                const progress = Math.min(100, Math.round((offset / file.size) * 100));
-                this.onProgress(progress);
+                    const bufferedAmount = this.conn.dataChannel?.bufferedAmount || 0;
+                    if (bufferedAmount > 64 * 1024) { // 64KB Buffer Limit
+                        setTimeout(checkBuffer, 50);
+                    } else {
+                        // Buffer safe, proceed
+                        this.worker.postMessage({ type: 'ack' });
+
+                        const progress = Math.min(100, Math.round((offset / file.size) * 100));
+                        this.onProgress(progress);
+                    }
+                };
+
+                checkBuffer();
             }
             else if (type === 'complete') {
                 this.onStatus('File Sent!');
@@ -291,6 +305,13 @@ export class P2PClient {
             }
         } else if (data.type === 'cancel') {
             this.onStatus('Transfer Cancelled by Peer');
+
+            // Stop sending if we are the sender
+            if (this.worker) {
+                this.worker.terminate();
+                this.worker = null;
+            }
+
             this.receivedChunks = [];
             this.receivedSize = 0;
             this.fileMeta = null;
