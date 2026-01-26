@@ -3,6 +3,8 @@ import { P2PClient } from '../utils/peerClient';
 import { Download, Link, FileCheck, Loader2, ArrowRight, ShieldCheck, DownloadCloud } from 'lucide-react';
 import toast from 'react-hot-toast';
 import clsx from 'clsx';
+import { motion } from 'framer-motion';
+import { slideUp, scaleIn } from '../utils/animations';
 
 function Receiver() {
     const [targetId, setTargetId] = useState(() => {
@@ -60,7 +62,12 @@ function Receiver() {
 
     return (
         <div className="w-full max-w-2xl mx-auto px-4">
-            <div className="glass-panel p-6 sm:p-8 rounded-2xl animate-fade-in relative overflow-hidden">
+            <motion.div
+                initial="hidden"
+                animate="visible"
+                variants={slideUp}
+                className="glass-panel p-6 sm:p-8 rounded-2xl relative overflow-hidden"
+            >
                 {/* Decorative Glow */}
                 <div className="absolute top-0 right-0 w-64 h-64 bg-emerald-500/10 rounded-full blur-3xl -z-10 -translate-y-1/2 translate-x-1/2"></div>
 
@@ -109,7 +116,12 @@ function Receiver() {
                 </div>
 
                 {progress > 0 && (
-                    <div className="mt-8 animate-fade-in p-6 bg-black/20 rounded-xl border border-white/5">
+                    <motion.div
+                        initial="hidden"
+                        animate="visible"
+                        variants={scaleIn}
+                        className="mt-8 p-6 bg-black/20 rounded-xl border border-white/5"
+                    >
                         <div className="flex justify-between items-center mb-4 text-sm font-medium">
                             <span className={clsx("flex items-center gap-2", progress === 100 ? "text-emerald-400" : "text-emerald-300")}>
                                 {progress < 100 && <Loader2 size={16} className="animate-spin" />}
@@ -133,7 +145,7 @@ function Receiver() {
                                 style={{ width: `${progress}%`, transition: 'width 0.2s linear' }}
                             />
                         </div>
-                    </div>
+                    </motion.div>
                 )}
 
                 <div className="mt-6 flex items-center justify-center gap-2 text-sm text-dim">
@@ -146,7 +158,7 @@ function Receiver() {
                     />
                     <span>{status}</span>
                 </div>
-            </div>
+            </motion.div>
         </div>
     );
 }

@@ -3,6 +3,8 @@ import { P2PClient } from '../utils/peerClient';
 import { Copy, Clipboard as ClipboardIcon, Link, Check, ArrowRight, Users, Monitor, Radio, X, ChevronDown, ChevronUp, RefreshCw } from 'lucide-react';
 import toast from 'react-hot-toast';
 import clsx from 'clsx';
+import { motion } from 'framer-motion';
+import { slideUp, hoverScale, tapScale } from '../utils/animations';
 
 function PeerList({ peers, mode }) {
     const [isOpen, setIsOpen] = useState(false);
@@ -240,7 +242,12 @@ function Clipboard() {
 
     return (
         <div className="w-full max-w-4xl mx-auto px-4">
-            <div className={clsx("glass-panel p-6 sm:p-8 rounded-2xl animate-fade-in relative overflow-hidden transition-colors duration-500", styles.border)}>
+            <motion.div
+                initial="hidden"
+                animate="visible"
+                variants={slideUp}
+                className={clsx("glass-panel p-6 sm:p-8 rounded-2xl relative overflow-hidden transition-colors duration-500", styles.border)}
+            >
                 {/* Decorative Glow */}
                 <div className={clsx("absolute top-0 right-0 w-96 h-96 rounded-full blur-3xl -z-10 -translate-y-1/2 translate-x-1/2 transition-colors duration-500", styles.glow)}></div>
 
@@ -282,7 +289,7 @@ function Clipboard() {
                     <ClipboardSession mode="host" visible={activeMode === 'host'} />
                     <ClipboardSession mode="client" visible={activeMode === 'client'} />
                 </div>
-            </div>
+            </motion.div>
         </div>
     );
 }

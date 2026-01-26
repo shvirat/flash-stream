@@ -1,4 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { motion } from 'framer-motion';
+import { slideUp, scaleIn, hoverScale, tapScale } from '../utils/animations';
 import { P2PClient } from '../utils/peerClient';
 import { Copy, Check, File, UploadCloud, Loader2, RefreshCw, X, ArrowRight } from 'lucide-react';
 import toast from 'react-hot-toast';
@@ -176,7 +178,12 @@ function Sender() {
 
     return (
         <div className="w-full max-w-2xl mx-auto px-4">
-            <div className="glass-panel p-6 sm:p-8 rounded-2xl animate-fade-in relative overflow-hidden">
+            <motion.div
+                initial="hidden"
+                animate="visible"
+                variants={slideUp}
+                className="glass-panel p-6 sm:p-8 rounded-2xl relative overflow-hidden"
+            >
                 {/* Decorative Glow */}
                 <div className="absolute top-0 right-0 w-64 h-64 bg-blue-500/10 rounded-full blur-3xl -z-10 -translate-y-1/2 translate-x-1/2"></div>
 
@@ -198,34 +205,40 @@ function Sender() {
                 ) : (
                     <>
                         <div className="mb-8">
-                            <label className="text-xs text-blue-300 font-bold uppercase tracking-wider mb-2 block">
-                                Your Session ID
-                            </label>
-                            <div className="glass-card p-2 rounded-xl flex items-center gap-2 border border-blue-500/30 bg-blue-500/5">
-                                <div className="flex-1 font-mono text-xl sm:text-2xl text-center text-blue-400 font-bold tracking-widest py-2 select-all">
-                                    {peerId}
+                            <div className="flex flex-col sm:flex-row gap-3">
+                                {/* ID Display */}
+                                <div className="flex-1 glass-card p-4 rounded-xl border border-blue-500/30 bg-blue-500/5 flex items-center justify-center">
+                                    <div className="font-mono text-2xl sm:text-3xl text-blue-400 font-bold tracking-widest select-all">
+                                        {peerId}
+                                    </div>
                                 </div>
-                                <div className="flex flex-col sm:flex-row gap-1">
-                                    <button
+
+                                {/* Buttons Group */}
+                                <div className="flex gap-3">
+                                    <motion.button
+                                        whileHover={hoverScale}
+                                        whileTap={tapScale}
                                         onClick={copyToClipboard}
-                                        className="p-3 hover:bg-blue-500/20 rounded-lg text-blue-300 transition-colors"
+                                        className="flex-1 sm:flex-none p-4 glass-card rounded-xl border border-blue-500/30 hover:bg-blue-500/10 text-blue-300 transition-colors flex items-center justify-center gap-2"
                                         title="Copy ID"
                                     >
                                         {copied ? <Check size={20} /> : <Copy size={20} />}
-                                    </button>
-                                    <button
+                                        <span className="sm:hidden text-sm font-bold">COPY</span>
+                                    </motion.button>
+
+                                    <motion.button
+                                        whileHover={hoverScale}
+                                        whileTap={tapScale}
                                         onClick={generateNewId}
                                         disabled={isConnected}
-                                        className="p-3 hover:bg-blue-500/20 rounded-lg text-blue-300 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                        className="flex-1 sm:flex-none p-4 glass-card rounded-xl border border-blue-500/30 hover:bg-blue-500/10 text-blue-300 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                                         title="Generate New ID"
                                     >
                                         <RefreshCw size={20} />
-                                    </button>
+                                        <span className="sm:hidden text-sm font-bold">RESET</span>
+                                    </motion.button>
                                 </div>
                             </div>
-                            <p className="text-center text-xs text-dim mt-2">
-                                Share this code with the receiver to connect.
-                            </p>
                         </div>
 
                         <div
@@ -247,7 +260,9 @@ function Sender() {
                             />
                             <label htmlFor="file-input" className="block p-8 sm:p-12 cursor-pointer w-full h-full">
                                 {file ? (
-                                    <div className="animate-slide-up">
+                                    <motion.div
+                                        initial="hidden" animate="visible" variants={scaleIn}
+                                    >
                                         <div className="w-16 h-16 mx-auto mb-4 bg-blue-500/20 rounded-full flex items-center justify-center">
                                             <File size={32} className="text-blue-400" />
                                         </div>
@@ -258,7 +273,7 @@ function Sender() {
                                         <span className="text-xs text-blue-300 uppercase tracking-widest font-bold border border-blue-500/30 px-3 py-1 rounded-full">
                                             Ready to Send
                                         </span>
-                                    </div>
+                                    </motion.div>
                                 ) : (
                                     <div className="group-hover:-translate-y-1 transition-transform duration-300">
                                         <div className={clsx("w-16 h-16 mx-auto mb-4 rounded-full flex items-center justify-center transition-colors", isDragging ? "bg-blue-500/20" : "bg-white/5")}>
@@ -313,24 +328,26 @@ function Sender() {
                                         Cancel
                                     </button>
                                 )}
-                                <button
+                                <motion.button
+                                    whileHover={!(!file || !isConnected || status === 'Sending...') ? hoverScale : {}}
+                                    whileTap={!(!file || !isConnected || status === 'Sending...') ? tapScale : {}}
                                     onClick={sendFile}
                                     disabled={!file || !isConnected || status === 'Sending...'}
                                     className={clsx(
                                         "flex-1 sm:flex-none px-8 py-3 rounded-xl font-bold flex items-center justify-center gap-2 transition-all",
                                         (!file || !isConnected || status === 'Sending...')
                                             ? "bg-white/5 text-dim cursor-not-allowed"
-                                            : "bg-blue-600 hover:bg-blue-500 text-white shadow-lg hover:shadow-blue-500/25 active:scale-95"
+                                            : "bg-blue-600 hover:bg-blue-500 text-white shadow-lg hover:shadow-blue-500/25"
                                     )}
                                 >
                                     {status === 'Sending...' ? <Loader2 className="animate-spin" size={20} /> : <ArrowRight size={20} />}
                                     {status === 'Sending...' ? 'Sending...' : 'Send Now'}
-                                </button>
+                                </motion.button>
                             </div>
                         </div>
                     </>
                 )}
-            </div>
+            </motion.div>
         </div>
     );
 }
