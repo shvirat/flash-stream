@@ -262,7 +262,7 @@ function Clipboard() {
                         </div>
                     </div>
 
-                    <div className="flex p-1 rounded-xl bg-black/40 border border-white/10 w-full justify-evenly md:w-auto overflow-x-auto">
+                    <div className="flex p-1 rounded-xl bg-black/40 border border-white/10 w-full justify-between md:w-auto overflow-x-auto touch-scroll-hide">
                         {[
                             { id: 'bidirectional', label: 'Peer-to-Peer', activeClass: 'bg-blue-600' },
                             { id: 'host', label: 'Host Mode', activeClass: 'bg-purple-600' },

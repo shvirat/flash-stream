@@ -3,6 +3,7 @@ import Sender from './components/Sender';
 import Logo from './assets/logo.svg';
 import Receiver from './components/Receiver';
 import Clipboard from './components/Clipboard';
+import NotFound from './components/NotFound';
 import { Features, HowItWorks, DownloadApp, PrivacyPolicy, TermsOfService, FAQ, Support, About } from './components/InfoPages';
 import { Share2, DownloadCloud, ArrowLeft, Clipboard as ClipboardIcon, Smartphone, Monitor, Zap, Share, Share2Icon, UploadCloud, Send, Download, Upload, Github, Twitter, Heart } from 'lucide-react';
 import { Toaster } from 'react-hot-toast';
@@ -103,7 +104,7 @@ function Layout({ children }) {
 
             <footer className="border-t border-white/10 bg-black/20 mt-24">
                 <div className="max-w-7xl mx-auto px-6 md:px-12  py-12">
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-16 mb-8">
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-8 md:gap-16 mb-8">
                         <div>
                             <h4 className="font-bold text-white mb-3">Product</h4>
                             <ul className="space-y-1 text-sm text-dim">
@@ -137,7 +138,7 @@ function Layout({ children }) {
 
                     <div className="pt-8 border-t border-white/5 flex flex-col md:flex-row justify-between items-center gap-4 text-xs text-dim">
                         <p>© {new Date().getFullYear()} FlashStream. Secure P2P Encryption.</p>
-                        <p className="flex items-center gap-1">Made with <Heart size={12} className="text-red-500 fill-red-500" /> for the web.</p>
+                        <p className="flex items-center justify-center gap-1">Made with <Heart size={16} className="text-red-500 fill-red-500 pt-0.5" /> for the web.</p>
                     </div>
                 </div>
             </footer>
@@ -164,6 +165,7 @@ function App() {
                     <Route path="/faq" element={<FAQ />} />
                     <Route path="/support" element={<Support />} />
                     <Route path="/about" element={<About />} />
+                    <Route path="*" element={<NotFound />} />
                 </Routes>
             </Layout>
             <Toaster
