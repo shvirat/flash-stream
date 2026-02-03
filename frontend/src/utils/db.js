@@ -9,13 +9,18 @@ let dbPromise = null;
 export const dbUtil = {
     async initDB() {
         if (!dbPromise) {
-            dbPromise = openDB(DB_NAME, 1, {
-                upgrade(db) {
+            dbPromise = openDB(DB_NAME, 2, {
+                upgrade(db, oldVersion, newVersion, transaction) {
+                    let store;
                     if (!db.objectStoreNames.contains(STORE_NAME)) {
-                        // keyPath: auto-incrementing ID for chunks to keep order
-                        // We also index by 'fileId' to group chunks belonging to one file
-                        const store = db.createObjectStore(STORE_NAME, { autoIncrement: true });
+                        store = db.createObjectStore(STORE_NAME, { autoIncrement: true });
                         store.createIndex('fileId', 'fileId', { unique: false });
+                    } else {
+                        store = transaction.objectStore(STORE_NAME);
+                    }
+
+                    if (!store.indexNames.contains('timestamp')) {
+                        store.createIndex('timestamp', 'timestamp', { unique: false });
                     }
                 },
             });
@@ -62,6 +67,23 @@ export const dbUtil = {
         const keys = await index.getAllKeys(IDBKeyRange.only(fileId));
 
         await Promise.all(keys.map(key => tx.store.delete(key)));
+        await tx.done;
+    },
+
+    async clearOldFiles(maxAge = 3600000) { // Default 1 Hour
+        const db = await this.initDB();
+        const cutoff = Date.now() - maxAge;
+        const tx = db.transaction(STORE_NAME, 'readwrite');
+        const index = tx.store.index('timestamp');
+
+        // Efficiently get all keys older than cutoff
+        // IDBKeyRange.upperBound(cutoff) selects everything where timestamp <= cutoff
+        const keys = await index.getAllKeys(IDBKeyRange.upperBound(cutoff));
+
+        if (keys.length > 0) {
+            console.log(`Cleaning up ${keys.length} old chunks...`);
+            await Promise.all(keys.map(key => tx.store.delete(key)));
+        }
         await tx.done;
     },
 

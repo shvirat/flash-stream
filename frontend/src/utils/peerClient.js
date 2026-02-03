@@ -128,6 +128,20 @@ export class P2PClient {
         this.handleConnection(conn);
     }
 
+    startHeartbeat(conn) {
+        if (conn._heartbeat) clearInterval(conn._heartbeat);
+        conn._lastPong = Date.now();
+        conn._heartbeat = setInterval(() => {
+            if (conn.open) {
+                conn.send({ type: 'ping' });
+                if (Date.now() - conn._lastPong > 10000) {
+                    console.warn('Peer dead (heartbeat timeout)');
+                    conn.close();
+                }
+            }
+        }, 2000);
+    }
+
     handleConnection(conn) {
         // Prevent duplicate incoming connections
         if (this.connections.some(c => c.peer === conn.peer && c.open)) {
@@ -160,13 +174,15 @@ export class P2PClient {
             }
             this.emitStatus('CONNECTED', 'Connected');
             this.onPeerJoin(conn);
+            this.startHeartbeat(conn);
         });
 
         conn.on('data', (data) => {
-            this.handleData(data);
+            this.handleData(data, conn);
         });
 
         conn.on('close', () => {
+            if (conn._heartbeat) clearInterval(conn._heartbeat);
             this.conn = null;
             this.connections = this.connections.filter(c => c !== conn);
             this.emitStatus('DISCONNECTED', 'Disconnected');
@@ -174,6 +190,7 @@ export class P2PClient {
 
         conn.on('error', (err) => {
             console.error('Connection error:', err);
+            if (conn._heartbeat) clearInterval(conn._heartbeat);
             this.connections = this.connections.filter(c => c !== conn);
             this.emitStatus('ERROR', 'Connection Error');
         });
@@ -213,7 +230,6 @@ export class P2PClient {
                 });
 
                 // Flow Control: Backpressure Handling
-                // Wait for buffer to drain before asking for next chunk
                 const checkBuffer = () => {
                     if (!this.conn || !this.conn.open) return;
                     if (!this.worker) return;
@@ -223,23 +239,28 @@ export class P2PClient {
                     const BUFFER_LIMIT = 1024 * 1024; // 1MB
 
                     if (bufferedAmount > BUFFER_LIMIT) {
-                        // Use bufferedamountlow event to avoid background tab throttling mechanisms
-                        // (setTimeout is throttled in background tabs, events are not)
-
                         const onLow = () => {
                             dc.removeEventListener('bufferedamountlow', onLow);
                             checkBuffer();
                         };
-
                         dc.addEventListener('bufferedamountlow', onLow);
                     } else {
-                        // Buffer safe, proceed
                         this.worker.postMessage({ type: 'ack' });
 
                         const progress = Math.min(100, Math.round((offset / file.size) * 100));
-                        this.onProgress(progress);
 
-                        // Notify if backgrounded (Sending)
+                        // Speed Calculation (Sender)
+                        const now = Date.now();
+                        const timeDiff = (now - this.lastSpeedTime) / 1000;
+                        if (timeDiff >= 1) {
+                            const bytesDiff = offset - this.lastBytes;
+                            this.currentSpeed = bytesDiff / timeDiff / (1024 * 1024); // MB/s
+                            this.lastBytes = offset;
+                            this.lastSpeedTime = now;
+                        }
+
+                        this.onProgress(progress, (this.currentSpeed || 0).toFixed(1));
+
                         this.updateNotification(
                             `Sending ${file.name}`,
                             `${progress}% - ${this.formatBytes(offset)} / ${this.formatBytes(file.size)}`,
@@ -264,6 +285,9 @@ export class P2PClient {
             }
         };
 
+        this.lastBytes = 0;
+        this.lastSpeedTime = Date.now();
+        this.currentSpeed = 0;
         this.worker.postMessage({ file });
     }
 
@@ -284,7 +308,6 @@ export class P2PClient {
         if (this.fileMeta) {
             dbUtil.clearFile(this.fileMeta.name);
         }
-        this.receivedChunks = [];
         this.receivedSize = 0;
         this.fileMeta = null;
     }
@@ -295,6 +318,7 @@ export class P2PClient {
             this.peer = null;
         }
         if (this.conn) {
+            if (this.conn._heartbeat) clearInterval(this.conn._heartbeat);
             try { this.conn.close(); } catch (e) { }
             this.conn = null;
         }
@@ -303,6 +327,7 @@ export class P2PClient {
             this.worker = null;
         }
         this.connections.forEach(c => {
+            if (c._heartbeat) clearInterval(c._heartbeat);
             try { c.close(); } catch (e) { }
         });
         this.connections = [];
@@ -329,21 +354,37 @@ export class P2PClient {
         });
     }
 
-    receivedChunks = [];
     receivedSize = 0;
     fileMeta = null;
+    lastBytes = 0;
+    lastSpeedTime = 0;
+    currentSpeed = 0;
 
-    async handleData(data) {
+    async handleData(data, conn) {
+        if (data.type === 'ping') {
+            conn.send({ type: 'pong' });
+            return;
+        }
+        if (data.type === 'pong') {
+            conn._lastPong = Date.now();
+            return;
+        }
+
         if (data.type === 'meta') {
-            this.fileMeta = data;
-            this.receivedChunks = [];
+            // Security: Sanitize Filename
+            const sanitizedName = data.name.replace(/[^a-zA-Z0-9.\-_]/g, '_');
+
+            this.fileMeta = { ...data, name: sanitizedName };
             this.receivedSize = 0;
+            this.lastBytes = 0;
+            this.lastSpeedTime = Date.now();
+            this.currentSpeed = 0;
+
             // Ensure connection is clean for this file (prevent appending to old chunks)
-            // Ensure connection is clean for this file (prevent appending to old chunks)
-            try { await dbUtil.clearFile(data.name); } catch (e) { console.warn(e); }
+            try { await dbUtil.clearFile(sanitizedName); } catch (e) { console.warn(e); }
 
             const truncate = (n) => n.length > 20 ? n.substring(0, 10) + '...' + n.substring(n.lastIndexOf('.')) : n;
-            this.emitStatus('TRANSFER_START', `Receiving ${truncate(data.name)}`);
+            this.emitStatus('TRANSFER_START', `Receiving ${truncate(sanitizedName)}`);
         } else if (data.type === 'chunk') {
             if (!this.fileMeta) return; // Ignore chunks if no meta (e.g. cancelled or done)
 
@@ -358,9 +399,20 @@ export class P2PClient {
 
             this.receivedSize += data.data.byteLength;
 
-            // Update Progress
+            // Update Progress & Speed
             const progress = Math.min(100, Math.round((this.receivedSize / this.fileMeta.size) * 100));
-            this.onProgress(progress);
+
+            // Speed Calculation (Receiver)
+            const now = Date.now();
+            const timeDiff = (now - this.lastSpeedTime) / 1000;
+            if (timeDiff >= 1) {
+                const bytesDiff = this.receivedSize - this.lastBytes;
+                this.currentSpeed = bytesDiff / timeDiff / (1024 * 1024); // MB/s
+                this.lastBytes = this.receivedSize;
+                this.lastSpeedTime = now;
+            }
+
+            this.onProgress(progress, (this.currentSpeed || 0).toFixed(1));
 
             // Notify if backgrounded (Receiving)
             this.updateNotification(
@@ -392,7 +444,6 @@ export class P2PClient {
                 }
 
                 // Cleanup / Reset State
-                this.receivedChunks = []; // Legacy cleanup
                 this.receivedSize = 0;
                 this.fileMeta = null;
             }
@@ -409,7 +460,9 @@ export class P2PClient {
             if (this.fileMeta) {
                 dbUtil.clearFile(this.fileMeta.name);
             }
-            this.receivedChunks = [];
+            if (this.fileMeta) {
+                dbUtil.clearFile(this.fileMeta.name);
+            }
             this.receivedSize = 0;
             this.fileMeta = null;
             this.onProgress(0);

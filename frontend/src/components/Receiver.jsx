@@ -5,6 +5,7 @@ import toast from 'react-hot-toast';
 import clsx from 'clsx';
 import { motion } from 'framer-motion';
 import { slideUp, scaleIn } from '../utils/animations';
+import { dbUtil } from '../utils/db';
 
 function Receiver() {
     const [targetId, setTargetId] = useState(() => {
@@ -19,6 +20,7 @@ function Receiver() {
     });
     const [status, setStatus] = useState('Ready to connect');
     const [progress, setProgress] = useState(0);
+    const [speed, setSpeed] = useState('0.0'); // MB/s
     const [isConnected, setIsConnected] = useState(false);
     const [receivedFile, setReceivedFile] = useState(null);
     const [fileSaved, setFileSaved] = useState(false);
@@ -26,21 +28,28 @@ function Receiver() {
     const clientRef = useRef(null);
 
     useEffect(() => {
+        // Run smart cleanup on startup (remove files older than 1 hour)
+        dbUtil.clearOldFiles(3600000).catch(console.warn);
+
         if (!clientRef.current) clientRef.current = new P2PClient();
         const client = clientRef.current;
         client.onStatus = (statusData) => {
             const { type, message } = statusData;
             setStatus(message);
             if (type === 'CONNECTED') { setIsConnected(true); toast.success('Connected to Sender!'); }
-            if (type === 'DISCONNECTED') { setIsConnected(false); toast('Disconnected'); }
+            if (type === 'DISCONNECTED') { setIsConnected(false); toast.error('Disconnected'); }
             if (type === 'ERROR') toast.error(message);
             if (type === 'TRANSFER_START') {
                 setReceivedFile(null);
                 setProgress(0);
+                setSpeed('0.0');
                 setFileSaved(false);
             }
         };
-        client.onProgress = (p) => setProgress(p);
+        client.onProgress = (p, s) => {
+            setProgress(p);
+            if (s) setSpeed(s);
+        };
         client.onFileReceived = (blob, name) => {
             const shortName = name.length > 20 ? name.substring(0, 15) + '...' + name.substring(name.lastIndexOf('.')) : name;
             toast.success(`Received ${shortName}!`);
@@ -69,6 +78,7 @@ function Receiver() {
         clientRef.current.cancelTransfer();
         setStatus('Cancelled');
         setProgress(0);
+        setSpeed('0.0');
         toast.error('Download Cancelled');
     };
 
@@ -147,6 +157,7 @@ function Receiver() {
                                 {progress === 100 ? 'Download Complete' : 'Downloading...'}
                             </span>
                             <div className="flex items-center gap-4">
+                                {progress < 100 && <span className="text-dim font-mono text-xs">{speed} MB/s</span>}
                                 <span className="text-white font-mono text-lg">{progress}%</span>
                                 {progress < 100 && (
                                     <button

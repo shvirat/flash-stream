@@ -11,6 +11,7 @@ function Sender() {
     const [status, setStatus] = useState('Initializing...');
     const [peerId, setPeerId] = useState('');
     const [progress, setProgress] = useState(0);
+    const [speed, setSpeed] = useState('0.0'); // MB/s
     const [copied, setCopied] = useState(false);
     const [isDragging, setIsDragging] = useState(false);
     const [isConnected, setIsConnected] = useState(false);
@@ -44,7 +45,10 @@ function Sender() {
             }
         };
 
-        client.onProgress = (p) => setProgress(p);
+        client.onProgress = (p, s) => {
+            setProgress(p);
+            if (s) setSpeed(s);
+        };
 
         client.init(true, savedId, 1).then((id) => {
             setPeerId(id);
@@ -66,9 +70,9 @@ function Sender() {
                     if (items[i].kind === 'file') {
                         const pastedFile = items[i].getAsFile();
                         if (pastedFile) {
-
                             setFile(pastedFile);
                             toast.success('Pasted File Selected');
+                            break; // Only take the first file
                         }
                     }
                 }
@@ -134,7 +138,10 @@ function Sender() {
                 toast.error(message);
             }
         };
-        client.onProgress = (p) => setProgress(p);
+        client.onProgress = (p, s) => {
+            setProgress(p);
+            if (s) setSpeed(s);
+        };
 
         client.init(true, null, 1).then((id) => {
             setPeerId(id);
@@ -150,8 +157,8 @@ function Sender() {
     const handleFileChange = (e) => {
         if (e.target.files?.[0]) {
             const selectedFile = e.target.files[0];
-
             setFile(selectedFile);
+            e.target.value = null; // Allow re-selecting the same file
         }
     };
 
@@ -182,6 +189,7 @@ function Sender() {
         toast.error('Transfer Cancelled');
         setStatus('Cancelled');
         setProgress(0);
+        setSpeed('0.0');
     };
 
     return (
@@ -304,7 +312,10 @@ function Sender() {
                                     <span className={clsx("transition-colors", progress === 100 ? "text-emerald-400" : "text-blue-300")}>
                                         {progress === 100 ? 'File Sent!' : 'Transferring...'}
                                     </span>
-                                    <span className="text-white font-mono">{progress}%</span>
+                                    <div className="flex items-center gap-4">
+                                        {progress < 100 && <span className="text-dim font-mono text-xs">{speed} MB/s</span>}
+                                        <span className="text-white font-mono">{progress}%</span>
+                                    </div>
                                 </div>
                                 <div className="w-full h-3 bg-white/5 rounded-full overflow-hidden border border-white/5">
                                     <div
