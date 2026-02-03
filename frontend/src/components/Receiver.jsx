@@ -20,26 +20,37 @@ function Receiver() {
     const [status, setStatus] = useState('Ready to connect');
     const [progress, setProgress] = useState(0);
     const [isConnected, setIsConnected] = useState(false);
+    const [receivedFile, setReceivedFile] = useState(null);
+    const [fileSaved, setFileSaved] = useState(false);
 
     const clientRef = useRef(null);
 
     useEffect(() => {
         if (!clientRef.current) clientRef.current = new P2PClient();
         const client = clientRef.current;
-        client.onStatus = (msg) => {
-            setStatus(msg);
-            if (msg === 'Connected') { setIsConnected(true); toast.success('Connected to Sender!'); }
-            if (msg === 'Disconnected') { setIsConnected(false); toast('Disconnected'); }
-            if (msg.includes('Error')) toast.error(msg);
+        client.onStatus = (statusData) => {
+            const { type, message } = statusData;
+            setStatus(message);
+            if (type === 'CONNECTED') { setIsConnected(true); toast.success('Connected to Sender!'); }
+            if (type === 'DISCONNECTED') { setIsConnected(false); toast('Disconnected'); }
+            if (type === 'ERROR') toast.error(message);
+            if (type === 'TRANSFER_START') {
+                setReceivedFile(null);
+                setProgress(0);
+                setFileSaved(false);
+            }
         };
         client.onProgress = (p) => setProgress(p);
         client.onFileReceived = (blob, name) => {
             const shortName = name.length > 20 ? name.substring(0, 15) + '...' + name.substring(name.lastIndexOf('.')) : name;
             toast.success(`Received ${shortName}!`);
             const url = URL.createObjectURL(blob);
+            setReceivedFile({ name, url, blob });
+            setFileSaved(true);
+
+            // Auto-download attempt
             const a = document.createElement('a'); a.href = url; a.download = name;
             document.body.appendChild(a); a.click(); document.body.removeChild(a);
-            URL.revokeObjectURL(url);
         };
         client.init(false, null, 1);
         return () => { if (client.peer) client.peer.destroy(); };
@@ -59,6 +70,13 @@ function Receiver() {
         setStatus('Cancelled');
         setProgress(0);
         toast.error('Download Cancelled');
+    };
+
+    // Manual download helper that doesn't reset 'Saved' state (since it's an explicit retry)
+    const handleManualDownload = () => {
+        if (!receivedFile) return;
+        const a = document.createElement('a'); a.href = receivedFile.url; a.download = receivedFile.name;
+        document.body.appendChild(a); a.click(); document.body.removeChild(a);
     };
 
     return (
@@ -149,12 +167,58 @@ function Receiver() {
                     </motion.div>
                 )}
 
+                {receivedFile && (
+                    <motion.div
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        className="mt-6 p-6 bg-emerald-500/10 rounded-xl border border-emerald-500/20"
+                    >
+                        <div className="flex flex-col items-center gap-4 text-center">
+                            <div className="p-3 bg-emerald-500/20 rounded-full">
+                                <FileCheck size={32} className="text-emerald-400" />
+                            </div>
+                            <div>
+                                <h3 className="text-lg font-bold text-white">File Received!</h3>
+                                <p className="text-emerald-300/80 text-sm font-mono break-all">{receivedFile.name}</p>
+                            </div>
+
+                            {!fileSaved ? (
+                                <a
+                                    href={receivedFile.url}
+                                    download={receivedFile.name}
+                                    onClick={() => setFileSaved(true)}
+                                    className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-500 text-white px-8 py-3 rounded-xl font-bold shadow-lg transition-transform hover:scale-105 active:scale-95 w-full sm:w-auto justify-center cursor-pointer"
+                                >
+                                    <Download size={20} />
+                                    Download File
+                                </a>
+                            ) : (
+                                <div className="flex flex-col items-center gap-2 w-full">
+                                    <button
+                                        disabled
+                                        className="flex items-center gap-2 bg-emerald-500/20 text-emerald-400 px-8 py-3 rounded-xl font-bold border border-emerald-500/20 w-full sm:w-auto justify-center cursor-default"
+                                    >
+                                        <FileCheck size={20} />
+                                        Saved
+                                    </button>
+                                    <button
+                                        onClick={handleManualDownload}
+                                        className="text-xs text-emerald-400/60 hover:text-emerald-400 underline transition-colors cursor-pointer"
+                                    >
+                                        Download again
+                                    </button>
+                                </div>
+                            )}
+                        </div>
+                    </motion.div>
+                )}
+
                 <div className="mt-6 flex items-center justify-center gap-2 text-sm text-dim">
                     <span
                         className={clsx("w-2 h-2 rounded-full", {
-                            'bg-emerald-500 shadow-[0_0_8px_#10b981] animate-pulse': isConnected,
-                            'bg-white/20': !isConnected && !status.includes('Error'),
-                            'bg-red-500': status.includes('Error')
+                            'bg-red-500 shadow-[0_0_8px_#ef4444]': status.includes('Error') || status.includes('Cancelled'),
+                            'bg-emerald-500 shadow-[0_0_8px_#10b981] animate-pulse': isConnected && !status.includes('Error') && !status.includes('Cancelled'),
+                            'bg-white/20': !isConnected && !status.includes('Error') && !status.includes('Cancelled')
                         })}
                     />
                     <span>{status}</span>

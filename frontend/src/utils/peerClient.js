@@ -1,4 +1,5 @@
 import Peer from 'peerjs';
+import { dbUtil } from './db';
 
 export class P2PClient {
     constructor() {
@@ -16,11 +17,16 @@ export class P2PClient {
         this.lastNotificationTime = 0;
 
         // Auto-clear notification when app is opened
-        document.addEventListener('visibilitychange', () => {
+        this.handleVisibilityChange = () => {
             if (document.visibilityState === 'visible') {
                 this.clearNotification('file-transfer');
             }
-        });
+        };
+        document.addEventListener('visibilitychange', this.handleVisibilityChange);
+    }
+
+    emitStatus(type, message) {
+        this.onStatus({ type, message });
     }
 
     init(isSender = true, initialId = null, maxPeers = Infinity) {
@@ -45,8 +51,12 @@ export class P2PClient {
             };
 
             const localServer = {
-                host: 'localhost',
-                port: 9000,
+                // host: 'localhost',
+                // port: 9000,
+                // path: '/peerjs'
+                host: 'p2p-signaling-server-spb6.onrender.com',
+                port: 443,
+                secure: true,
                 path: '/peerjs'
             };
 
@@ -62,7 +72,7 @@ export class P2PClient {
 
             this.peer.on('error', (err) => {
                 console.error('Peer error:', err);
-                this.onStatus('Error: ' + err.type);
+                this.emitStatus('ERROR', 'Error: ' + err.type);
 
                 // Fix for zombie connection: If connecting fails (e.g. wrong ID), cleanup the pending connection
                 if (['peer-unavailable', 'socket-error', 'browser-incompatible'].includes(err.type)) {
@@ -89,7 +99,7 @@ export class P2PClient {
         // Prevent self-connection
         if (targetId === this.peerId) {
             console.warn('Cannot connect to yourself');
-            this.onStatus('Error: Cannot connect to yourself');
+            this.emitStatus('ERROR', 'Error: Cannot connect to yourself');
             return;
         }
 
@@ -102,13 +112,18 @@ export class P2PClient {
         const conn = this.peer.connect(remotePeerId); // Removed { reliable: true } which can cause hangs
 
         // Connection Timeout Safety
-        setTimeout(() => {
+        const timer = setTimeout(() => {
             if (conn && !conn.open) {
                 console.warn('Connection timed out');
                 conn.close();
-                this.onStatus('Connection Timed Out');
+                this.emitStatus('ERROR', 'Connection Timed Out');
             }
         }, 15000);
+
+        // Clear timeout on any final state
+        conn.on('open', () => clearTimeout(timer));
+        conn.on('close', () => clearTimeout(timer));
+        conn.on('error', () => clearTimeout(timer));
 
         this.handleConnection(conn);
     }
@@ -117,6 +132,7 @@ export class P2PClient {
         // Prevent duplicate incoming connections
         if (this.connections.some(c => c.peer === conn.peer && c.open)) {
             console.warn('Duplicate connection rejected:', conn.peer);
+            this.emitStatus('ERROR', `Rejected duplicate from ${conn.peer}`);
             conn.close();
             return;
         }
@@ -138,7 +154,11 @@ export class P2PClient {
 
         conn.on('open', () => {
             console.log('Connected to:', conn.peer);
-            this.onStatus('Connected');
+            // Optimization: Set Backpressure threshold once
+            if (conn.dataChannel) {
+                conn.dataChannel.bufferedAmountLowThreshold = 256 * 1024; // 256KB
+            }
+            this.emitStatus('CONNECTED', 'Connected');
             this.onPeerJoin(conn);
         });
 
@@ -149,13 +169,13 @@ export class P2PClient {
         conn.on('close', () => {
             this.conn = null;
             this.connections = this.connections.filter(c => c !== conn);
-            this.onStatus('Disconnected');
+            this.emitStatus('DISCONNECTED', 'Disconnected');
         });
 
         conn.on('error', (err) => {
             console.error('Connection error:', err);
             this.connections = this.connections.filter(c => c !== conn);
-            this.onStatus('Connection Error');
+            this.emitStatus('ERROR', 'Connection Error');
         });
     }
 
@@ -188,7 +208,8 @@ export class P2PClient {
 
                 this.conn.send({
                     type: 'chunk',
-                    data: data
+                    data: data,
+                    offset: offset
                 });
 
                 // Flow Control: Backpressure Handling
@@ -199,16 +220,11 @@ export class P2PClient {
 
                     const dc = this.conn.dataChannel;
                     const bufferedAmount = dc?.bufferedAmount || 0;
-                    const BUFFER_LIMIT = 64 * 1024; // 64KB
+                    const BUFFER_LIMIT = 1024 * 1024; // 1MB
 
                     if (bufferedAmount > BUFFER_LIMIT) {
                         // Use bufferedamountlow event to avoid background tab throttling mechanisms
                         // (setTimeout is throttled in background tabs, events are not)
-
-                        // Set threshold to 32KB to keep pipe flowing
-                        if (dc.bufferedAmountLowThreshold !== 32768) {
-                            dc.bufferedAmountLowThreshold = 32768;
-                        }
 
                         const onLow = () => {
                             dc.removeEventListener('bufferedamountlow', onLow);
@@ -236,14 +252,14 @@ export class P2PClient {
                 checkBuffer();
             }
             else if (type === 'complete') {
-                this.onStatus('File Sent!');
+                this.emitStatus('TRANSFER_SUCCESS', 'File Sent!');
                 this.updateNotification('File Sent', `Successfully sent ${file.name}`, 'file-transfer');
                 this.worker.terminate();
                 this.worker = null;
             }
             else if (type === 'error') {
                 console.error('Worker error:', error);
-                this.onStatus('Error reading file');
+                this.emitStatus('ERROR', 'Error reading file');
                 this.worker.terminate();
             }
         };
@@ -260,11 +276,14 @@ export class P2PClient {
 
         if (this.conn && this.conn.open) {
             this.conn.send({ type: 'cancel' });
-            this.onStatus('Transfer Cancelled');
+            this.emitStatus('INFO', 'Transfer Cancelled');
             this.onProgress(0);
         }
 
         // Cleanup local state (Receiver or Sender)
+        if (this.fileMeta) {
+            dbUtil.clearFile(this.fileMeta.name);
+        }
         this.receivedChunks = [];
         this.receivedSize = 0;
         this.fileMeta = null;
@@ -287,13 +306,19 @@ export class P2PClient {
             try { c.close(); } catch (e) { }
         });
         this.connections = [];
+        this.peerId = null;
 
-        // Reset Callbacks to avoid phantom calls
+        // Optional: Clear old chunks
+        dbUtil.clearAll();
+
+        // Reset Callbacks
         this.onProgress = () => { };
         this.onStatus = () => { };
         this.onFileReceived = () => { };
         this.onTextReceived = () => { };
         this.onPeerJoin = () => { };
+
+        document.removeEventListener('visibilitychange', this.handleVisibilityChange);
     }
 
     sendText(text) {
@@ -308,17 +333,29 @@ export class P2PClient {
     receivedSize = 0;
     fileMeta = null;
 
-    handleData(data) {
+    async handleData(data) {
         if (data.type === 'meta') {
             this.fileMeta = data;
             this.receivedChunks = [];
             this.receivedSize = 0;
+            // Ensure connection is clean for this file (prevent appending to old chunks)
+            // Ensure connection is clean for this file (prevent appending to old chunks)
+            try { await dbUtil.clearFile(data.name); } catch (e) { console.warn(e); }
+
             const truncate = (n) => n.length > 20 ? n.substring(0, 10) + '...' + n.substring(n.lastIndexOf('.')) : n;
-            this.onStatus(`Receiving ${truncate(data.name)}`);
+            this.emitStatus('TRANSFER_START', `Receiving ${truncate(data.name)}`);
         } else if (data.type === 'chunk') {
             if (!this.fileMeta) return; // Ignore chunks if no meta (e.g. cancelled or done)
 
-            this.receivedChunks.push(data.data);
+            // Store chunk in IndexedDB instead of RAM
+            try {
+                await dbUtil.storeChunk(this.fileMeta.name, data.data, data.offset);
+            } catch (err) {
+                console.error('DB Error:', err);
+                this.emitStatus('ERROR', 'DB Write Failed');
+                return;
+            }
+
             this.receivedSize += data.data.byteLength;
 
             // Update Progress
@@ -335,19 +372,32 @@ export class P2PClient {
 
             // Check Complete
             if (this.receivedSize >= this.fileMeta.size) {
-                this.onStatus('Download Complete');
+                this.emitStatus('TRANSFER_SUCCESS', 'Download Complete');
                 this.updateNotification('Download Complete', `Finished receiving ${this.fileMeta.name}`, 'file-transfer');
 
-                const blob = new Blob(this.receivedChunks, { type: this.fileMeta.mime });
-                this.onFileReceived(blob, this.fileMeta.name);
+                // Reconstruct from DB
+                try {
+                    const blob = await dbUtil.getFile(this.fileMeta.name, this.fileMeta.mime);
+                    if (blob) {
+                        this.onFileReceived(blob, this.fileMeta.name);
+                        // Cleanup DB after successful handover (optional, or keep as cache)
+                        dbUtil.clearFile(this.fileMeta.name).catch(console.warn);
+                    } else {
+                        console.error('File reassembly failed: Blob is null');
+                        this.emitStatus('ERROR', 'Error: File corrupt');
+                    }
+                } catch (err) {
+                    console.error('File reassembly error:', err);
+                    this.emitStatus('ERROR', 'Error: Could not save file');
+                }
 
                 // Cleanup / Reset State
-                this.receivedChunks = [];
+                this.receivedChunks = []; // Legacy cleanup
                 this.receivedSize = 0;
-                this.fileMeta = null; // Important: Prevents multiple downloads
+                this.fileMeta = null;
             }
         } else if (data.type === 'cancel') {
-            this.onStatus('Transfer Cancelled by Peer');
+            this.emitStatus('INFO', 'Transfer Cancelled by Peer');
 
             // Stop sending if we are the sender
             if (this.worker) {
@@ -355,6 +405,10 @@ export class P2PClient {
                 this.worker = null;
             }
 
+            // Transfer Cancelled
+            if (this.fileMeta) {
+                dbUtil.clearFile(this.fileMeta.name);
+            }
             this.receivedChunks = [];
             this.receivedSize = 0;
             this.fileMeta = null;
@@ -362,7 +416,7 @@ export class P2PClient {
         } else if (data.type === 'text') {
             this.onTextReceived(data.text);
         } else if (data.type === 'error') {
-            this.onStatus(`Error: ${data.message}`);
+            this.emitStatus('ERROR', `Error: ${data.message}`);
             // Force close if instructed by peer logic (though peer usually closes it)
         }
     }

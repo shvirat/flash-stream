@@ -65,16 +65,18 @@ function ClipboardSession({ mode, visible }) {
         const client = clientRef.current;
         const isHost = mode === 'host';
 
-        client.onStatus = (msg) => {
+        client.onStatus = (statusData) => {
+            const { type, message } = statusData;
+
             // Smart Status for Clipboard: Revert to 'Ready' if we have active connections
-            const isError = msg.startsWith('Error') || msg === 'Connection Timed Out' || msg === 'Disconnected';
+            const isError = type === 'ERROR' || type === 'DISCONNECTED';
             const hasActive = client.connections.some(c => c.open);
 
             if (isError && hasActive) {
-                if (msg !== 'Disconnected') toast.error(msg); // Don't toast on simple disconnects if we have others
+                if (type === 'ERROR') toast.error(message);
                 setStatus('Connected');
             } else {
-                setStatus(msg);
+                setStatus(message);
             }
             setPeers(client.connections.map(c => c.peer));
         };

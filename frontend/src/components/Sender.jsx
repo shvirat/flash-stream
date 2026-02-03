@@ -17,6 +17,7 @@ function Sender() {
 
     // Stable client ref
     const clientRef = useRef(null);
+    const toastIdRef = useRef(null);
 
     useEffect(() => {
         if (!clientRef.current) clientRef.current = new P2PClient();
@@ -24,18 +25,22 @@ function Sender() {
         let savedId = localStorage.getItem('senderId');
         if (savedId && savedId.length > 8) savedId = null;
 
-        client.onStatus = (msg) => {
-            setStatus(msg);
-            if (msg === 'Connected') {
+        client.onStatus = (statusData) => {
+            const { type, message } = statusData;
+            setStatus(message);
+
+            if (type === 'CONNECTED') {
                 setIsConnected(true);
                 toast.success('Receiver Connected!');
             }
-            if (msg === 'File Sent!') {
-                toast.success('File Sent Successfully!');
+            if (type === 'TRANSFER_SUCCESS') {
+                if (toastIdRef.current) toast.dismiss(toastIdRef.current);
+                toast.success(message);
             }
-            if (msg === 'Disconnected' || msg.startsWith('Error')) {
+            if (type === 'DISCONNECTED' || type === 'ERROR') {
+                if (toastIdRef.current) toast.dismiss(toastIdRef.current);
                 setIsConnected(false);
-                toast.error(msg);
+                toast.error(message);
             }
         };
 
@@ -61,9 +66,7 @@ function Sender() {
                     if (items[i].kind === 'file') {
                         const pastedFile = items[i].getAsFile();
                         if (pastedFile) {
-                            if (pastedFile.size > 500 * 1024 * 1024) {
-                                toast.error('File too large! Max 500MB for beta.');
-                            }
+
                             setFile(pastedFile);
                             toast.success('Pasted File Selected');
                         }
@@ -103,19 +106,33 @@ function Sender() {
             return;
         }
 
-        if (clientRef.current.peer) clientRef.current.destroy();
+        if (clientRef.current) {
+            clientRef.current.destroy();
+            clientRef.current = null;
+        }
         setPeerId('');
         localStorage.removeItem('senderId');
 
-        if (!clientRef.current) clientRef.current = new P2PClient();
-        // clientRef.current = new P2PClient(); // Re-use instance or re-init if null
+        clientRef.current = new P2PClient();
         const client = clientRef.current;
 
-        client.onStatus = (msg) => {
-            setStatus(msg);
-            if (msg === 'Connected') { setIsConnected(true); toast.success('Receiver Connected!'); }
-            if (msg === 'File Sent!') toast.success('File Sent Successfully!');
-            if (msg === 'Disconnected' || msg.startsWith('Error')) { setIsConnected(false); toast.error(msg); }
+        client.onStatus = (statusData) => {
+            const { type, message } = statusData;
+            setStatus(message);
+            if (type === 'CONNECTED') { setIsConnected(true); toast.success('Receiver Connected!'); }
+            if (type === 'TRANSFER_SUCCESS') {
+                if (toastIdRef.current) toast.dismiss(toastIdRef.current);
+                toast.success(message);
+            }
+            if (type === 'DISCONNECTED' || type === 'ERROR') {
+                if (toastIdRef.current) toast.dismiss(toastIdRef.current);
+                setIsConnected(false);
+                toast.error(message);
+            }
+            if (type === 'INFO' && message.includes('Cancelled')) {
+                if (toastIdRef.current) toast.dismiss(toastIdRef.current);
+                toast.error(message);
+            }
         };
         client.onProgress = (p) => setProgress(p);
 
@@ -133,10 +150,7 @@ function Sender() {
     const handleFileChange = (e) => {
         if (e.target.files?.[0]) {
             const selectedFile = e.target.files[0];
-            if (selectedFile.size > 500 * 1024 * 1024) {
-                toast.error('File too large! Max 500MB for beta.');
-                // Optional: setFile(null) or allow it with warning
-            }
+
             setFile(selectedFile);
         }
     };
@@ -147,9 +161,7 @@ function Sender() {
         setIsDragging(false);
         if (e.dataTransfer.files?.[0]) {
             const selectedFile = e.dataTransfer.files[0];
-            if (selectedFile.size > 500 * 1024 * 1024) {
-                toast.error('File too large! Max 500MB for beta.');
-            }
+
             setFile(selectedFile);
             toast.success('File Selected');
         }
@@ -159,19 +171,14 @@ function Sender() {
         if (!file) return;
         Notification.requestPermission();
         setStatus('Sending...');
-        const toastId = toast.loading('Sending file...');
+        toastIdRef.current = toast.loading('Sending file...');
 
-        const originalStatus = clientRef.current.onStatus;
-        clientRef.current.onStatus = (msg) => {
-            if (msg === 'File Sent!' || msg.includes('Error')) toast.dismiss(toastId);
-            originalStatus(msg);
-        };
         clientRef.current.sendFile(file);
     };
 
     const cancelTransfer = () => {
         clientRef.current.cancelTransfer();
-        toast.dismiss();
+        if (toastIdRef.current) toast.dismiss(toastIdRef.current);
         toast.error('Transfer Cancelled');
         setStatus('Cancelled');
         setProgress(0);
@@ -312,9 +319,9 @@ function Sender() {
                             <div className="flex items-center gap-3 bg-black/20 px-4 py-2 rounded-lg w-full sm:w-auto justify-center sm:justify-start">
                                 <span
                                     className={clsx("w-2.5 h-2.5 rounded-full animate-pulse", {
-                                        'bg-emerald-500 shadow-[0_0_8px_#10b981]': status === 'Connected',
-                                        'bg-red-500': status.includes('Error'),
-                                        'bg-yellow-500': !status.includes('Error') && status !== 'Connected'
+                                        'bg-red-500 shadow-[0_0_8px_#ef4444]': status.includes('Error') || status.includes('Cancelled'),
+                                        'bg-emerald-500 shadow-[0_0_8px_#10b981]': isConnected && !status.includes('Error') && !status.includes('Cancelled'),
+                                        'bg-yellow-500': !isConnected && !status.includes('Error') && !status.includes('Cancelled')
                                     })}
                                 />
                                 <span className="text-sm font-medium text-dim">{status}</span>

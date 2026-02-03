@@ -7,7 +7,7 @@ self.onmessage = (e) => {
     if (file) {
         self.file = file;
         self.offset = 0;
-        self.CHUNK_SIZE = 64 * 1024; // 64KB
+        self.CHUNK_SIZE = 256 * 1024; // 256KB
         self.reader = new FileReader();
 
         self.reader.onload = (evt) => {
