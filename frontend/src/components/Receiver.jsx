@@ -159,22 +159,25 @@ function Receiver() {
                             <div className="flex items-center gap-4">
                                 {progress < 100 && <span className="text-dim font-mono text-xs">{speed} MB/s</span>}
                                 <span className="text-white font-mono text-lg">{progress}%</span>
-                                {progress < 100 && (
-                                    <button
-                                        onClick={cancelDownload}
-                                        className="text-xs text-red-400 hover:text-red-300 underline"
-                                    >
-                                        Cancel
-                                    </button>
-                                )}
                             </div>
                         </div>
-                        <div className="w-full h-3 bg-white/5 rounded-full overflow-hidden border border-white/5">
+                        <div className="w-full h-3 bg-white/5 rounded-full overflow-hidden border border-white/5 mb-4">
                             <div
                                 className="h-full bg-linear-to-r from-emerald-500 to-teal-400 shadow-[0_0_15px_rgba(16,185,129,0.5)]"
                                 style={{ width: `${progress}%`, transition: 'width 0.2s linear' }}
                             />
                         </div>
+
+                        {progress < 100 && (
+                            <div className="flex justify-center">
+                                <button
+                                    onClick={cancelDownload}
+                                    className="px-4 py-2 rounded-lg bg-red-500/10 text-red-400 hover:bg-red-500/20 text-sm font-medium transition-colors"
+                                >
+                                    Cancel Download
+                                </button>
+                            </div>
+                        )}
                     </motion.div>
                 )}
 

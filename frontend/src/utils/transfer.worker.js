@@ -18,7 +18,7 @@ self.onmessage = (e) => {
             self.postMessage({
                 type: 'chunk',
                 data,
-                offset: self.offset + len
+                offset: self.offset // Send START offset (0, 256k, etc)
             }, [data]);
 
             self.offset += len;

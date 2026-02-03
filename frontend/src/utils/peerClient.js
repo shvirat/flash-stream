@@ -15,6 +15,7 @@ export class P2PClient {
         this.maxPeers = Infinity;
         this.worker = null;
         this.lastNotificationTime = 0;
+        this.dataQueue = Promise.resolve();
 
         // Auto-clear notification when app is opened
         this.handleVisibilityChange = () => {
@@ -178,7 +179,14 @@ export class P2PClient {
         });
 
         conn.on('data', (data) => {
-            this.handleData(data, conn);
+            // Queue data handling to prevent race conditions (e.g. meta clearing file while chunk is writing)
+            this.dataQueue = this.dataQueue.then(async () => {
+                try {
+                    await this.handleData(data, conn);
+                } catch (err) {
+                    console.error('Error handling data:', err);
+                }
+            });
         });
 
         conn.on('close', () => {
@@ -247,7 +255,7 @@ export class P2PClient {
                     } else {
                         this.worker.postMessage({ type: 'ack' });
 
-                        const progress = Math.min(100, Math.round((offset / file.size) * 100));
+                        const progress = Math.min(100, Math.round(((offset + data.byteLength) / file.size) * 100));
 
                         // Speed Calculation (Sender)
                         const now = Date.now();
@@ -371,8 +379,10 @@ export class P2PClient {
         }
 
         if (data.type === 'meta') {
-            // Security: Sanitize Filename
-            const sanitizedName = data.name.replace(/[^a-zA-Z0-9.\-_]/g, '_');
+            // Security: Sanitize Filename (Blacklist Approach)
+            // Allows Emojis, Unicode (e.g. Hindi/Japanese), and symbols ($%@#)
+            // blocked: < > : " / \ | ? * (Windows/Linux reserved) and control chars
+            const sanitizedName = data.name.replace(/[<>:"/\\|?*\x00-\x1F]/g, '_');
 
             this.fileMeta = { ...data, name: sanitizedName };
             this.receivedSize = 0;
@@ -460,9 +470,7 @@ export class P2PClient {
             if (this.fileMeta) {
                 dbUtil.clearFile(this.fileMeta.name);
             }
-            if (this.fileMeta) {
-                dbUtil.clearFile(this.fileMeta.name);
-            }
+
             this.receivedSize = 0;
             this.fileMeta = null;
             this.onProgress(0);
