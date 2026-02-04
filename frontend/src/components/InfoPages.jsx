@@ -52,7 +52,7 @@ export const HowItWorks = () => (
     <Pagelayout title="How It Works" icon={HelpCircle}>
         <ol className="list-decimal list-inside space-y-6">
             <li className="pl-4">
-                <strong className="text-white">Open FlashStream:</strong> Open the app on both devices (Sender and Receiver).
+                <strong className="text-white">Open Flash Stream:</strong> Open the app on both devices (Sender and Receiver).
             </li>
             <li className="pl-4">
                 <strong className="text-white">Generate Code:</strong> The Sender gets a unique 6-character connection code.
@@ -69,13 +69,13 @@ export const HowItWorks = () => (
 
 export const DownloadApp = () => (
     <Pagelayout title="Download" icon={DownloadIcon}>
-        <p className="mb-6">FlashStream is a Progressive Web App (PWA). You don't need to visit an App Store to install it!</p>
+        <p className="mb-6">Flash Stream is a Progressive Web App (PWA). You don't need to visit an App Store to install it!</p>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div className="bg-white/5 p-6 rounded-xl border border-white/10">
                 <h3 className="text-lg font-bold text-white mb-2">iOS / Android</h3>
                 <ol className="list-decimal list-inside text-sm space-y-2">
-                    <li>Open <strong>FlashStream</strong> in Chrome or Safari.</li>
+                    <li>Open <strong>Flash Stream</strong> in Chrome or Safari.</li>
                     <li>Tap the <strong>Share</strong> button (iOS) or <strong>Menu</strong> (Android).</li>
                     <li>Select <strong>Add to Home Screen</strong>.</li>
                 </ol>
@@ -84,7 +84,7 @@ export const DownloadApp = () => (
                 <h3 className="text-lg font-bold text-white mb-2">Desktop (Chrome/Edge)</h3>
                 <ol className="list-decimal list-inside text-sm space-y-2">
                     <li>Look for the <strong>Install icon</strong> (monitor with down arrow) in the address bar.</li>
-                    <li>Click <strong>Install FlashStream</strong>.</li>
+                    <li>Click <strong>Install Flash Stream</strong>.</li>
                     <li>It will now run as a native-like app on your desktop.</li>
                 </ol>
             </div>
@@ -95,7 +95,7 @@ export const DownloadApp = () => (
 export const PrivacyPolicy = () => (
     <Pagelayout title="Privacy Policy" icon={Shield}>
         <p><strong>Last Updated: January 2024</strong></p>
-        <p>At FlashStream, privacy is our core feature, not an afterthought.</p>
+        <p>At Flash Stream, privacy is our core feature, not an afterthought.</p>
 
         <h3 className="text-xl font-bold text-white mt-6 mb-2">1. No Data Storage</h3>
         <p>We do not store your files. Files are streamed directly from the sender's device to the receiver's device using WebRTC.</p>
@@ -110,7 +110,7 @@ export const PrivacyPolicy = () => (
 
 export const TermsOfService = () => (
     <Pagelayout title="Terms of Service" icon={FileText}>
-        <p>By using FlashStream, you agree to these terms.</p>
+        <p>By using Flash Stream, you agree to these terms.</p>
         <ul className="list-disc list-inside space-y-2 mt-4">
             <li>You accept full responsibility for the files you transfer.</li>
             <li>Do not use this service for illegal file sharing or copyright infringement.</li>
@@ -154,12 +154,12 @@ export const Support = () => (
 
 export const About = () => (
     <Pagelayout title="About Us" icon={Info}>
-        <p>FlashStream was built with a simple mission: <strong>Make file sharing invisible.</strong></p>
+        <p>Flash Stream was built with a simple mission: <strong>Make file sharing invisible.</strong></p>
         <p className="mt-4">
             We were tired of emailing files to ourselves, logging into cloud drives just to move a photo, and dealing with compression limits on messaging apps.
         </p>
         <p className="mt-4">
-            FlashStream is an open initiative to bring true Peer-to-Peer technology to the web, making the internet feel a little more like a local network.
+            Flash Stream is an open initiative to bring true Peer-to-Peer technology to the web, making the internet feel a little more like a local network.
         </p>
         <div className="mt-8 p-4 bg-white/5 rounded-xl border border-white/10 text-center">
             <p>Built with ❤️ using React, Node.js and PeerJS.</p>

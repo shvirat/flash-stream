@@ -134,13 +134,15 @@ export class P2PClient {
         conn._lastPong = Date.now();
         conn._heartbeat = setInterval(() => {
             if (conn.open) {
-                conn.send({ type: 'ping' });
-                if (Date.now() - conn._lastPong > 10000) {
-                    console.warn('Peer dead (heartbeat timeout)');
-                    conn.close();
+                if (conn.open) {
+                    conn.send({ type: 'ping' });
+                    if (Date.now() - conn._lastPong > 60000) { // Relaxed timeout (60s)
+                        console.warn('Peer dead (heartbeat timeout)');
+                        conn.close();
+                    }
                 }
             }
-        }, 2000);
+        }, 10000); // Relaxed interval (10s)
     }
 
     handleConnection(conn) {
@@ -193,7 +195,9 @@ export class P2PClient {
             if (conn._heartbeat) clearInterval(conn._heartbeat);
             this.conn = null;
             this.connections = this.connections.filter(c => c !== conn);
+            if (this.pendingFiles) this.pendingFiles.delete(conn.peer); // Cleanup pending
             this.emitStatus('DISCONNECTED', 'Disconnected');
+            this.onProgress(0); // Reset progress on disconnect
         });
 
         conn.on('error', (err) => {
@@ -201,6 +205,7 @@ export class P2PClient {
             if (conn._heartbeat) clearInterval(conn._heartbeat);
             this.connections = this.connections.filter(c => c !== conn);
             this.emitStatus('ERROR', 'Connection Error');
+            this.onProgress(0); // Reset progress on error
         });
     }
 
@@ -210,6 +215,10 @@ export class P2PClient {
             return;
         }
 
+        // Initialize state for handshake
+        this.pendingFiles = this.pendingFiles || new Map();
+        this.pendingFiles.set(this.conn.peer, file);
+
         // Send metadata first
         this.conn.send({
             type: 'meta',
@@ -217,6 +226,21 @@ export class P2PClient {
             size: file.size,
             mime: file.type
         });
+
+        this.emitStatus('INFO', 'Waiting for peer to be ready...');
+
+        // Safety Timeout: If peer doesn't reply "ready" in 10s, cancel.
+        setTimeout(() => {
+            if (this.pendingFiles.has(this.conn.peer)) {
+                this.pendingFiles.delete(this.conn.peer);
+                this.emitStatus('ERROR', 'Peer timed out (Handshake)');
+                this.onProgress(0);
+            }
+        }, 10000);
+    }
+
+    startWorker(file) {
+        if (!this.conn || !this.conn.open) return;
 
         // Initialize Worker
         if (this.worker) this.worker.terminate();
@@ -285,6 +309,7 @@ export class P2PClient {
                 this.updateNotification('File Sent', `Successfully sent ${file.name}`, 'file-transfer');
                 this.worker.terminate();
                 this.worker = null;
+                this.pendingFiles.delete(this.conn.peer);
             }
             else if (type === 'error') {
                 console.error('Worker error:', error);
@@ -395,6 +420,17 @@ export class P2PClient {
 
             const truncate = (n) => n.length > 20 ? n.substring(0, 10) + '...' + n.substring(n.lastIndexOf('.')) : n;
             this.emitStatus('TRANSFER_START', `Receiving ${truncate(sanitizedName)}`);
+
+            // Handshake: Tell sender we are ready
+            conn.send({ type: 'transfer-ready' });
+
+        } else if (data.type === 'transfer-ready') {
+            const pendingFile = this.pendingFiles?.get(conn.peer);
+            if (pendingFile) {
+                this.emitStatus('INFO', 'Peer Ready. Starting Transfer...');
+                this.startWorker(pendingFile);
+            }
+
         } else if (data.type === 'chunk') {
             if (!this.fileMeta) return; // Ignore chunks if no meta (e.g. cancelled or done)
 

@@ -1,11 +1,15 @@
 {
-  "name": "FlashStream - Peer-to-Peer File Transfer",
-  "short_name": "FlashStream",
-  "description": "FlashStream is a modern peer-to-peer file transfer platform to transfer files directly between devices without limitations.",
+  "name": "Flash Stream - Peer-to-Peer File Transfer",
+  "short_name": "Flash Stream",
+  "description": "Flash Stream is a modern peer-to-peer file transfer platform to transfer files directly between devices without limitations.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
-  "categories": ["file transfer", "peer-to-peer", "p2p"],
+  "categories": [
+    "file transfer",
+    "peer-to-peer",
+    "p2p"
+  ],
   "icons": [
     {
       "src": "/images/web-app-manifest-192x192.png",

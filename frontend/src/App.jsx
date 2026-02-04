@@ -81,7 +81,7 @@ function Layout({ children }) {
             <header className="py-6 px-4 mb-4">
                 <div className="max-w-7xl mx-auto flex items-center justify-between">
                     <Link to="/" className="flex items-center gap-2 no-underline">
-                        <img src={Logo} alt="FlashStream Logo" className="w-10 h-10 object-contain hover:scale-110 transition-transform" />
+                        <img src={Logo} alt="Flash Stream Logo" className="w-10 h-10 object-contain hover:scale-110 transition-transform" />
                         <h1 className="text-2xl font-bold tracking-tight text-white">
                             Flash<span className="text-gradient">Stream</span>
                         </h1>
@@ -137,7 +137,7 @@ function Layout({ children }) {
                     </div>
 
                     <div className="pt-8 border-t border-white/5 flex flex-col md:flex-row justify-between items-center gap-4 text-xs text-dim">
-                        <p>© {new Date().getFullYear()} FlashStream. Secure P2P Encryption.</p>
+                        <p>© {new Date().getFullYear()} Flash Stream. Secure P2P Encryption.</p>
                         <p className="flex items-center justify-center gap-1">Made with <Heart size={16} className="text-red-500 fill-red-500 pt-0.5" /> for the web.</p>
                     </div>
                 </div>
