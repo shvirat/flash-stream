@@ -229,14 +229,14 @@ export class P2PClient {
 
         this.emitStatus('INFO', 'Waiting for peer to be ready...');
 
-        // Safety Timeout: If peer doesn't reply "ready" in 10s, cancel.
+        // Safety Timeout: If peer doesn't reply "ready" in 60s, cancel.
         setTimeout(() => {
             if (this.pendingFiles.has(this.conn.peer)) {
                 this.pendingFiles.delete(this.conn.peer);
                 this.emitStatus('ERROR', 'Peer timed out (Handshake)');
                 this.onProgress(0);
             }
-        }, 10000);
+        }, 60000);
     }
 
     startWorker(file) {

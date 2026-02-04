@@ -83,7 +83,7 @@ function Layout({ children }) {
                     <Link to="/" className="flex items-center gap-2 no-underline">
                         <img src={Logo} alt="Flash Stream Logo" className="w-10 h-10 object-contain hover:scale-110 transition-transform" />
                         <h1 className="text-2xl font-bold tracking-tight text-white">
-                            Flash<span className="text-gradient">Stream</span>
+                            Flash <span className="text-gradient">Stream</span>
                         </h1>
                     </Link>
 
