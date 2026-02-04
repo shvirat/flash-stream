@@ -1,8 +1,8 @@
-# ⚡ FlashStream
+# ⚡ Flash Stream
 
-**FlashStream** is a high-performance, secure, and limitless Peer-to-Peer (P2P) file transfer and clipboard synchronization tool. Built with modern web technologies, it allows devices to share data directly without intermediate servers, ensuring maximum privacy and speed.
+**Flash Stream** is a high-performance, secure, and limitless Peer-to-Peer (P2P) file transfer and clipboard synchronization tool. Built with modern web technologies, it allows devices to share data directly without intermediate servers, ensuring maximum privacy and speed.
 
-![FlashStream Banner](/frontend/public/images/flashstream-og-image.png)
+![Flash Stream Banner](/frontend/public/images/flashstream-og-image.png)
 
 ## 🚀 Key Features
 
@@ -45,8 +45,8 @@ Incoming data is piped directly into **IndexedDB** rather than RAM. This allows 
 
 1.  Clone the repository:
     ```bash
-    git clone https://github.com/yourusername/flashstream.git
-    cd flashstream/frontend
+    git clone https://github.com/shvirat/flash-stream.git
+    cd flash-stream/frontend
     ```
 
 2.  Install dependencies:
