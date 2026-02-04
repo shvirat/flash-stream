@@ -312,7 +312,7 @@ function Sender() {
                                     <span className={clsx("transition-colors", progress === 100 ? "text-emerald-400" : "text-blue-300")}>
                                         {progress === 100 ? 'File Sent!' : 'Transferring...'}
                                     </span>
-                                    <div className="flex items-center gap-4">
+                                    <div className="flex items-center gap-3">
                                         {progress < 100 && <span className="text-dim font-mono text-xs">{speed} MB/s</span>}
                                         <span className="text-white font-mono">{progress}%</span>
                                     </div>

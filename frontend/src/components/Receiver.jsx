@@ -156,9 +156,9 @@ function Receiver() {
                                 {progress < 100 && <Loader2 size={16} className="animate-spin" />}
                                 {progress === 100 ? 'Download Complete' : 'Downloading...'}
                             </span>
-                            <div className="flex items-center gap-4">
+                            <div className="flex items-center gap-3">
                                 {progress < 100 && <span className="text-dim font-mono text-xs">{speed} MB/s</span>}
-                                <span className="text-white font-mono text-lg">{progress}%</span>
+                                <span className="text-white font-mono">{progress}%</span>
                             </div>
                         </div>
                         <div className="w-full h-3 bg-white/5 rounded-full overflow-hidden border border-white/5 mb-4">
