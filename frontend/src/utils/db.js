@@ -9,19 +9,19 @@ let dbPromise = null;
 export const dbUtil = {
     async initDB() {
         if (!dbPromise) {
-            dbPromise = openDB(DB_NAME, 2, {
+            dbPromise = openDB(DB_NAME, 3, {
                 upgrade(db, oldVersion, newVersion, transaction) {
-                    let store;
-                    if (!db.objectStoreNames.contains(STORE_NAME)) {
-                        store = db.createObjectStore(STORE_NAME, { autoIncrement: true });
-                        store.createIndex('fileId', 'fileId', { unique: false });
-                    } else {
-                        store = transaction.objectStore(STORE_NAME);
+                    // Schema Upgrade: Change to Composite Key [fileId, offset] for uniqueness
+                    if (db.objectStoreNames.contains(STORE_NAME)) {
+                        db.deleteObjectStore(STORE_NAME);
                     }
 
-                    if (!store.indexNames.contains('timestamp')) {
-                        store.createIndex('timestamp', 'timestamp', { unique: false });
-                    }
+                    const store = db.createObjectStore(STORE_NAME, {
+                        keyPath: ['fileId', 'offset']
+                    });
+
+                    // Timestamp index for cleanup
+                    store.createIndex('timestamp', 'timestamp', { unique: false });
                 },
             });
         }
@@ -29,44 +29,59 @@ export const dbUtil = {
     },
 
     async storeChunk(fileId, chunkArrayBuffer, offset) {
-        const db = await this.initDB();
-        await db.add(STORE_NAME, {
-            fileId,
-            data: chunkArrayBuffer,
-            offset,
-            timestamp: Date.now()
-        });
+        try {
+            const db = await this.initDB();
+            // put() is idempotent: overwrites existing chunk if same fileId and offset
+            await db.put(STORE_NAME, {
+                fileId,
+                offset,
+                data: chunkArrayBuffer,
+                timestamp: Date.now()
+            });
+        } catch (err) {
+            if (err.name === 'QuotaExceededError') {
+                console.error('Storage Quota Exceeded');
+                // Could emit global error if connected to UI, for now we log
+                throw new Error('Disk Full');
+            }
+            throw err;
+        }
     },
 
     async getFile(fileId, mimeType) {
         const db = await this.initDB();
-        // Get all chunks for this file
         const tx = db.transaction(STORE_NAME, 'readonly');
-        const index = tx.store.index('fileId');
 
-        // getAll guarantees order by primary key (insertion order), 
-        // which matches our sequential receiving order.
-        const chunks = await index.getAll(IDBKeyRange.only(fileId));
+        // Use Primary Key Range [fileId, 0] -> [fileId, Number.MAX_SAFE_INTEGER]
+        // This implicitly sorts by offset because it is the second part of the key
+        const range = IDBKeyRange.bound([fileId, 0], [fileId, Number.MAX_SAFE_INTEGER]);
+        const chunks = await tx.store.getAll(range);
 
         if (!chunks || chunks.length === 0) return null;
 
-        // Sort by offset to ensure correct order regardless of write completion time
-        chunks.sort((a, b) => a.offset - b.offset);
+        // Gap Detection / Integrity Check
+        let expectedOffset = 0;
+        const buffers = [];
 
-        // Extract just the data buffers
-        const buffers = chunks.map(c => c.data);
+        for (const chunk of chunks) {
+            if (chunk.offset !== expectedOffset) {
+                console.error(`Integrity Error: Missing chunk at offset ${expectedOffset}, found ${chunk.offset}`);
+                throw new Error('File Corrupt: Missing Data Chunk');
+            }
+            buffers.push(chunk.data);
+            expectedOffset += chunk.data.byteLength;
+        }
+
         return new Blob(buffers, { type: mimeType });
     },
 
     async clearFile(fileId) {
         const db = await this.initDB();
         const tx = db.transaction(STORE_NAME, 'readwrite');
-        const index = tx.store.index('fileId');
 
-        // Efficiently find keys to delete
-        const keys = await index.getAllKeys(IDBKeyRange.only(fileId));
-
-        await Promise.all(keys.map(key => tx.store.delete(key)));
+        // Efficient Range Delete on Primary Key
+        const range = IDBKeyRange.bound([fileId, 0], [fileId, Number.MAX_SAFE_INTEGER]);
+        await tx.store.delete(range);
         await tx.done;
     },
 
@@ -76,8 +91,6 @@ export const dbUtil = {
         const tx = db.transaction(STORE_NAME, 'readwrite');
         const index = tx.store.index('timestamp');
 
-        // Efficiently get all keys older than cutoff
-        // IDBKeyRange.upperBound(cutoff) selects everything where timestamp <= cutoff
         const keys = await index.getAllKeys(IDBKeyRange.upperBound(cutoff));
 
         if (keys.length > 0) {

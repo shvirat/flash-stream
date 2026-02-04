@@ -16,6 +16,8 @@ export class P2PClient {
         this.worker = null;
         this.lastNotificationTime = 0;
         this.dataQueue = Promise.resolve();
+        this.heartbeats = new Map(); // PeerId -> IntervalId
+        this.pendingFiles = new Map(); // PeerId -> File
 
         // Auto-clear notification when app is opened
         this.handleVisibilityChange = () => {
@@ -33,8 +35,13 @@ export class P2PClient {
     init(isSender = true, initialId = null, maxPeers = Infinity) {
         this.maxPeers = maxPeers;
         return new Promise((resolve, reject) => {
-            // Generate 6-char ID if not provided: Uppercase alphanumeric
-            const shortId = initialId || Math.random().toString(36).substring(2, 8).toUpperCase();
+            // Generate 6-char ID if not provided: Uppercase alphanumeric (Secure)
+            let shortId = initialId;
+            if (!shortId) {
+                const array = new Uint32Array(1);
+                crypto.getRandomValues(array);
+                shortId = array[0].toString(36).substring(2, 8).toUpperCase();
+            }
 
             // Determine Configuration based on Environment
             const isProduction = window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1';
@@ -130,19 +137,25 @@ export class P2PClient {
     }
 
     startHeartbeat(conn) {
-        if (conn._heartbeat) clearInterval(conn._heartbeat);
-        conn._lastPong = Date.now();
-        conn._heartbeat = setInterval(() => {
+        // Clear existing heartbeat for this peer
+        if (this.heartbeats.has(conn.peer)) {
+            clearInterval(this.heartbeats.get(conn.peer));
+            this.heartbeats.delete(conn.peer);
+        }
+
+        conn._lastPong = Date.now(); // We still attach timestamp to conn for convenience, or we could use another Map. Keeping it on conn is fine for data, but interval should be managed.
+
+        const interval = setInterval(() => {
             if (conn.open) {
-                if (conn.open) {
-                    conn.send({ type: 'ping' });
-                    if (Date.now() - conn._lastPong > 60000) { // Relaxed timeout (60s)
-                        console.warn('Peer dead (heartbeat timeout)');
-                        conn.close();
-                    }
+                conn.send({ type: 'ping' });
+                if (Date.now() - conn._lastPong > 60000) { // Relaxed timeout (60s)
+                    console.warn('Peer dead (heartbeat timeout)');
+                    conn.close();
                 }
             }
         }, 10000); // Relaxed interval (10s)
+
+        this.heartbeats.set(conn.peer, interval);
     }
 
     handleConnection(conn) {
@@ -192,17 +205,40 @@ export class P2PClient {
         });
 
         conn.on('close', () => {
-            if (conn._heartbeat) clearInterval(conn._heartbeat);
+            if (this.heartbeats.has(conn.peer)) {
+                clearInterval(this.heartbeats.get(conn.peer));
+                this.heartbeats.delete(conn.peer);
+            }
+            if (this.handshakeTimer) {
+                clearTimeout(this.handshakeTimer);
+                this.handshakeTimer = null;
+            }
+
+            // Critical: Reset queue to prevent memory leak
+            this.dataQueue = Promise.resolve();
+
             this.conn = null;
             this.connections = this.connections.filter(c => c !== conn);
-            if (this.pendingFiles) this.pendingFiles.delete(conn.peer); // Cleanup pending
+            if (this.pendingFiles) this.pendingFiles.delete(conn.peer);
             this.emitStatus('DISCONNECTED', 'Disconnected');
             this.onProgress(0); // Reset progress on disconnect
         });
 
         conn.on('error', (err) => {
             console.error('Connection error:', err);
-            if (conn._heartbeat) clearInterval(conn._heartbeat);
+
+            if (this.heartbeats.has(conn.peer)) {
+                clearInterval(this.heartbeats.get(conn.peer));
+                this.heartbeats.delete(conn.peer);
+            }
+            if (this.handshakeTimer) {
+                clearTimeout(this.handshakeTimer);
+                this.handshakeTimer = null;
+            }
+
+            // Critical: Reset queue
+            this.dataQueue = Promise.resolve();
+
             this.connections = this.connections.filter(c => c !== conn);
             this.emitStatus('ERROR', 'Connection Error');
             this.onProgress(0); // Reset progress on error
@@ -230,7 +266,8 @@ export class P2PClient {
         this.emitStatus('INFO', 'Waiting for peer to be ready...');
 
         // Safety Timeout: If peer doesn't reply "ready" in 60s, cancel.
-        setTimeout(() => {
+        if (this.handshakeTimer) clearTimeout(this.handshakeTimer);
+        this.handshakeTimer = setTimeout(() => {
             if (this.pendingFiles.has(this.conn.peer)) {
                 this.pendingFiles.delete(this.conn.peer);
                 this.emitStatus('ERROR', 'Peer timed out (Handshake)');
@@ -240,6 +277,12 @@ export class P2PClient {
     }
 
     startWorker(file) {
+        // Clear handshake timer as we are starting
+        if (this.handshakeTimer) {
+            clearTimeout(this.handshakeTimer);
+            this.handshakeTimer = null;
+        }
+
         if (!this.conn || !this.conn.open) return;
 
         // Initialize Worker
@@ -351,7 +394,7 @@ export class P2PClient {
             this.peer = null;
         }
         if (this.conn) {
-            if (this.conn._heartbeat) clearInterval(this.conn._heartbeat);
+            // Heartbeat cleanup handled in close map iteration below
             try { this.conn.close(); } catch (e) { }
             this.conn = null;
         }
@@ -359,10 +402,20 @@ export class P2PClient {
             this.worker.terminate();
             this.worker = null;
         }
+
+        // Cleanup Maps
         this.connections.forEach(c => {
-            if (c._heartbeat) clearInterval(c._heartbeat);
             try { c.close(); } catch (e) { }
         });
+
+        // Clear Intervals
+        for (const [peerId, timer] of this.heartbeats) {
+            clearInterval(timer);
+        }
+        this.heartbeats.clear();
+        this.pendingFiles.clear();
+        this.dataQueue = Promise.resolve();
+
         this.connections = [];
         this.peerId = null;
 
@@ -407,7 +460,12 @@ export class P2PClient {
             // Security: Sanitize Filename (Blacklist Approach)
             // Allows Emojis, Unicode (e.g. Hindi/Japanese), and symbols ($%@#)
             // blocked: < > : " / \ | ? * (Windows/Linux reserved) and control chars
-            const sanitizedName = data.name.replace(/[<>:"/\\|?*\x00-\x1F]/g, '_');
+            let sanitizedName = data.name.replace(/[<>:"/\\|?*\x00-\x1F]/g, '_');
+
+            // Windows Reserved Names (CON, PRN, AUX, NUL, COM1-9, LPT1-9)
+            if (/^(con|prn|aux|nul|com\d|lpt\d)$/i.test(sanitizedName)) {
+                sanitizedName = '_' + sanitizedName;
+            }
 
             this.fileMeta = { ...data, name: sanitizedName };
             this.receivedSize = 0;
@@ -432,7 +490,14 @@ export class P2PClient {
             }
 
         } else if (data.type === 'chunk') {
-            if (!this.fileMeta) return; // Ignore chunks if no meta (e.g. cancelled or done)
+            if (!this.fileMeta) return; // Ignore chunks if no meta
+
+            // Security: Data Integrity Check
+            if (data.offset < 0 || data.offset + data.data.byteLength > this.fileMeta.size) {
+                console.error('Security Warning: Invalid chunk offset detected');
+                // We rely on simple drop here. Could emit ERROR, but dropping is safer to prevent DDOS loops.
+                return;
+            }
 
             // Store chunk in IndexedDB instead of RAM
             try {
