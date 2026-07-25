@@ -15,6 +15,7 @@ function Sender() {
     const [copied, setCopied] = useState(false);
     const [isDragging, setIsDragging] = useState(false);
     const [isConnected, setIsConnected] = useState(false);
+    const [isSending, setIsSending] = useState(false);
 
     // Stable client ref
     const clientRef = useRef(null);
@@ -35,12 +36,19 @@ function Sender() {
                 toast.success('Receiver Connected!');
             }
             if (type === 'TRANSFER_SUCCESS') {
+                setIsSending(false);
                 if (toastIdRef.current) toast.dismiss(toastIdRef.current);
                 toast.success(message);
             }
             if (type === 'DISCONNECTED' || type === 'ERROR') {
+                setIsSending(false);
                 if (toastIdRef.current) toast.dismiss(toastIdRef.current);
                 setIsConnected(false);
+                toast.error(message);
+            }
+            if (type === 'INFO' && message.includes('Cancelled')) {
+                setIsSending(false);
+                if (toastIdRef.current) toast.dismiss(toastIdRef.current);
                 toast.error(message);
             }
         };
@@ -56,7 +64,7 @@ function Sender() {
             setStatus('Waiting for connection...');
         }).catch((err) => {
             console.error('Init failed:', err);
-            toast.error(`Failed: ${err.type || 'Connection Error'}`);
+            // toast.error(`Failed: ${err.type || 'Connection Error'}`);
         });
 
         const handleDragOver = (e) => { e.preventDefault(); setIsDragging(true); };
@@ -123,17 +131,23 @@ function Sender() {
         client.onStatus = (statusData) => {
             const { type, message } = statusData;
             setStatus(message);
-            if (type === 'CONNECTED') { setIsConnected(true); toast.success('Receiver Connected!'); }
+            if (type === 'CONNECTED') { 
+                setIsConnected(true); 
+                toast.success('Receiver Connected!');
+            }
             if (type === 'TRANSFER_SUCCESS') {
+                setIsSending(false);
                 if (toastIdRef.current) toast.dismiss(toastIdRef.current);
                 toast.success(message);
             }
             if (type === 'DISCONNECTED' || type === 'ERROR') {
+                setIsSending(false);
                 if (toastIdRef.current) toast.dismiss(toastIdRef.current);
                 setIsConnected(false);
                 toast.error(message);
             }
             if (type === 'INFO' && message.includes('Cancelled')) {
+                setIsSending(false);
                 if (toastIdRef.current) toast.dismiss(toastIdRef.current);
                 toast.error(message);
             }
@@ -150,7 +164,7 @@ function Sender() {
             toast.success('New ID Generated');
         }).catch((err) => {
             console.error('Init failed:', err);
-            toast.error(`Failed: ${err.type || 'Connection Error'}`);
+            // toast.error(`Failed: ${err.type || 'Connection Error'}`);
         });
     };
 
@@ -177,6 +191,7 @@ function Sender() {
     const sendFile = () => {
         if (!file) return;
         Notification.requestPermission();
+        setIsSending(true);
         setStatus('Sending...');
         toastIdRef.current = toast.loading('Sending file...');
 
@@ -185,8 +200,9 @@ function Sender() {
 
     const cancelTransfer = () => {
         clientRef.current.cancelTransfer();
+        setIsSending(false);
         if (toastIdRef.current) toast.dismiss(toastIdRef.current);
-        toast.error('Transfer Cancelled');
+        // toast.error('Transfer Cancelled');
         setStatus('Cancelled');
         setProgress(0);
         setSpeed('0.0');
@@ -339,7 +355,7 @@ function Sender() {
                             </div>
 
                             <div className="flex gap-3 w-full sm:w-auto">
-                                {status === 'Sending...' && (
+                                {isSending && (
                                     <button
                                         onClick={cancelTransfer}
                                         className="flex-1 sm:flex-none px-6 py-3 rounded-xl font-bold bg-red-500/10 text-red-400 hover:bg-red-500/20 border border-red-500/20 transition-all"
@@ -348,19 +364,19 @@ function Sender() {
                                     </button>
                                 )}
                                 <motion.button
-                                    whileHover={!(!file || !isConnected || status === 'Sending...') ? hoverScale : {}}
-                                    whileTap={!(!file || !isConnected || status === 'Sending...') ? tapScale : {}}
+                                    whileHover={!(!file || !isConnected || isSending) ? hoverScale : {}}
+                                    whileTap={!(!file || !isConnected || isSending) ? tapScale : {}}
                                     onClick={sendFile}
-                                    disabled={!file || !isConnected || status === 'Sending...'}
+                                    disabled={!file || !isConnected || isSending}
                                     className={clsx(
                                         "flex-1 sm:flex-none px-8 py-3 rounded-xl font-bold flex items-center justify-center gap-2 transition-all",
-                                        (!file || !isConnected || status === 'Sending...')
+                                        (!file || !isConnected || isSending)
                                             ? "bg-white/5 text-dim cursor-not-allowed"
                                             : "bg-blue-600 hover:bg-blue-500 text-white shadow-lg hover:shadow-blue-500/25"
                                     )}
                                 >
-                                    {status === 'Sending...' ? <Loader2 className="animate-spin" size={20} /> : <ArrowRight size={20} />}
-                                    {status === 'Sending...' ? 'Sending...' : 'Send Now'}
+                                    {isSending ? <Loader2 className="animate-spin" size={20} /> : <ArrowRight size={20} />}
+                                    {isSending ? 'Sending...' : 'Send Now'}
                                 </motion.button>
                             </div>
                         </div>

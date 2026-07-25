@@ -462,8 +462,6 @@ export class P2PClient {
 
         if (data.type === 'meta') {
             // Security: Sanitize Filename (Blacklist Approach)
-            // Allows Emojis, Unicode (e.g. Hindi/Japanese), and symbols ($%@#)
-            // blocked: < > : " / \ | ? * (Windows/Linux reserved) and control chars
             let sanitizedName = data.name.replace(/[<>:"/\\|?*\x00-\x1F]/g, '_');
 
             // Windows Reserved Names (CON, PRN, AUX, NUL, COM1-9, LPT1-9)
@@ -473,11 +471,37 @@ export class P2PClient {
 
             this.fileMeta = { ...data, name: sanitizedName };
             this.receivedSize = 0;
-            this.lastBytes = 0;
-            this.lastSpeedTime = Date.now();
-            this.currentSpeed = 0;
 
-            // Ensure connection is clean for this file (prevent appending to old chunks)
+            // Receiver Batching State
+            this.receiverBatch = [];
+            this.receiverBatchSize = 0;
+            this.receiverBatchOffset = 0;
+
+            // --- DECOUPLED SPEEDOMETER & UI LOOP ---
+            this.transferStartTime = Date.now();
+            
+            if (this.speedInterval) clearInterval(this.speedInterval);
+            this.speedInterval = setInterval(() => {
+                const now = Date.now();
+                const totalSeconds = (now - this.transferStartTime) / 1000;
+                
+                if (totalSeconds > 0 && this.fileMeta) {
+                    // Calculate TRUE average speed from start to current moment
+                    const averageSpeed = (this.receivedSize / (1024 * 1024)) / totalSeconds;
+                    const progress = Math.min(100, Math.round((this.receivedSize / this.fileMeta.size) * 100));
+                    
+                    this.onProgress(progress, averageSpeed.toFixed(1));
+                    
+                    this.updateNotification(
+                        `Receiving ${this.fileMeta.name}`,
+                        `${progress}% - ${this.formatBytes(this.receivedSize)} / ${this.formatBytes(this.fileMeta.size)}`,
+                        'file-transfer',
+                        progress
+                    );
+                }
+            }, 250); // Update UI 4 times a second safely without blocking the network
+
+            // Ensure connection is clean for this file
             try { await dbUtil.clearFile(sanitizedName); } catch (e) { console.warn(e); }
 
             const truncate = (n) => n.length > 20 ? n.substring(0, 10) + '...' + n.substring(n.lastIndexOf('.')) : n;
@@ -494,60 +518,53 @@ export class P2PClient {
             }
 
         } else if (data.type === 'chunk') {
-            if (!this.fileMeta) return; // Ignore chunks if no meta
+            if (!this.fileMeta) return; 
 
             // Security: Data Integrity Check
             if (data.offset < 0 || data.offset + data.data.byteLength > this.fileMeta.size) {
                 console.error('Security Warning: Invalid chunk offset detected');
-                // We rely on simple drop here. Could emit ERROR, but dropping is safer to prevent DDOS loops.
                 return;
             }
 
-            // Store chunk in IndexedDB instead of RAM
-            try {
-                await dbUtil.storeChunk(this.fileMeta.name, data.data, data.offset);
-            } catch (err) {
-                console.error('DB Error:', err);
-                this.emitStatus('ERROR', 'DB Write Failed');
-                return;
-            }
-
+            // 1. Buffer the chunk objects strictly by their true offset
+            this.receiverBatch.push({ 
+                offset: data.offset, 
+                data: data.data 
+            }); 
+            this.receiverBatchSize += data.data.byteLength;
             this.receivedSize += data.data.byteLength;
 
-            // Update Progress & Speed
-            const progress = Math.min(100, Math.round((this.receivedSize / this.fileMeta.size) * 100));
+            // 2. Flush to IndexedDB in a single bulk transaction
+            if (this.receiverBatchSize >= 2 * 1024 * 1024 || this.receivedSize >= this.fileMeta.size) {
+                try {
+                    // IndexedDB will automatically sort them correctly, even if they arrived out of order
+                    await dbUtil.storeChunkBatch(this.fileMeta.name, this.receiverBatch);
+                } catch (err) {
+                    console.error('DB Error:', err);
+                    this.emitStatus('ERROR', 'DB Write Failed');
+                    return;
+                }
 
-            // Speed Calculation (Receiver)
-            const now = Date.now();
-            const timeDiff = (now - this.lastSpeedTime) / 1000;
-            if (timeDiff >= 1) {
-                const bytesDiff = this.receivedSize - this.lastBytes;
-                this.currentSpeed = bytesDiff / timeDiff / (1024 * 1024); // MB/s
-                this.lastBytes = this.receivedSize;
-                this.lastSpeedTime = now;
+                // Clear RAM batch
+                this.receiverBatch = [];
+                this.receiverBatchSize = 0;
             }
 
-            this.onProgress(progress, (this.currentSpeed || 0).toFixed(1));
-
-            // Notify if backgrounded (Receiving)
-            this.updateNotification(
-                `Receiving ${this.fileMeta.name}`,
-                `${progress}% - ${this.formatBytes(this.receivedSize)} / ${this.formatBytes(this.fileMeta.size)}`,
-                'file-transfer',
-                progress
-            );
-
-            // Check Complete
+            // 3. Check Complete
             if (this.receivedSize >= this.fileMeta.size) {
+                // Stop the UI speedometer loop
+                if (this.speedInterval) clearInterval(this.speedInterval);
+
+                // FORCE UI to 100% to fix the "Stuck at 99%" visual bug
+                this.onProgress(100, (this.currentSpeed || 0).toFixed(1));
+
                 this.emitStatus('TRANSFER_SUCCESS', 'Download Complete');
                 this.updateNotification('Download Complete', `Finished receiving ${this.fileMeta.name}`, 'file-transfer');
 
-                // Reconstruct from DB
                 try {
                     const blob = await dbUtil.getFile(this.fileMeta.name, this.fileMeta.mime);
                     if (blob) {
                         this.onFileReceived(blob, this.fileMeta.name);
-                        // Cleanup DB after successful handover (optional, or keep as cache)
                         dbUtil.clearFile(this.fileMeta.name).catch(console.warn);
                     } else {
                         console.error('File reassembly failed: Blob is null');
@@ -558,23 +575,23 @@ export class P2PClient {
                     this.emitStatus('ERROR', 'Error: Could not save file');
                 }
 
-                // Cleanup / Reset State
                 this.receivedSize = 0;
                 this.fileMeta = null;
             }
         } else if (data.type === 'cancel') {
             this.emitStatus('INFO', 'Transfer Cancelled by Peer');
 
-            // Stop sending if we are the sender
             if (this.worker) {
                 this.worker.terminate();
                 this.worker = null;
             }
 
-            // Transfer Cancelled
             if (this.fileMeta) {
                 dbUtil.clearFile(this.fileMeta.name);
             }
+            
+            // Clean up intervals
+            if (this.speedInterval) clearInterval(this.speedInterval);
 
             this.receivedSize = 0;
             this.fileMeta = null;
@@ -583,7 +600,6 @@ export class P2PClient {
             this.onTextReceived(data.text);
         } else if (data.type === 'error') {
             this.emitStatus('ERROR', `Error: ${data.message}`);
-            // Force close if instructed by peer logic (though peer usually closes it)
         }
     }
 

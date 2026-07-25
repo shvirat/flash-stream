@@ -90,9 +90,9 @@ function Layout({ children }) {
                     {!isHome && (
                         <Link
                             to="/"
-                            className="flex items-center gap-2 text-sm text-dim hover:text-white transition-colors px-4 py-2 rounded-full hover:bg-white/5"
+                            className="flex items-center justify-center gap-2 text-sm text-dim hover:text-white transition-colors px-4 py-2 rounded-full hover:bg-white/5"
                         >
-                            <ArrowLeft size={16} /> <span className="hidden sm:inline">Back to Home</span>
+                            <ArrowLeft size={16} className='mt-0.5'/> <span className="hidden sm:inline">Back to Home</span>
                         </Link>
                     )}
                 </div>

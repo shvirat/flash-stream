@@ -48,6 +48,22 @@ export const dbUtil = {
         }
     },
 
+    async storeChunkBatch(fileId, chunksArray) {
+        const db = await this.initDB();
+        const tx = db.transaction(STORE_NAME, 'readwrite');
+        
+        // Write all chunks in one lightning-fast transaction
+        for (const item of chunksArray) {
+            tx.store.put({
+                fileId,
+                offset: item.offset,
+                data: item.data, // Raw ArrayBuffer
+                timestamp: Date.now()
+            });
+        }
+        await tx.done;
+    },
+
     async getFile(fileId, mimeType) {
         const db = await this.initDB();
         const tx = db.transaction(STORE_NAME, 'readonly');
