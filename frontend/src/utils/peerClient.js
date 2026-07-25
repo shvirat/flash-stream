@@ -186,7 +186,7 @@ export class P2PClient {
             console.log('Connected to:', conn.peer);
             // Optimization: Set Backpressure threshold once
             if (conn.dataChannel) {
-                conn.dataChannel.bufferedAmountLowThreshold = 256 * 1024; // 256KB
+                conn.dataChannel.bufferedAmountLowThreshold = 1024 * 1024; // 1MB
             }
             this.emitStatus('CONNECTED', 'Connected');
             this.onPeerJoin(conn);
@@ -311,7 +311,7 @@ export class P2PClient {
 
                     const dc = this.conn.dataChannel;
                     const bufferedAmount = dc?.bufferedAmount || 0;
-                    const BUFFER_LIMIT = 8 * 1024 * 1024; // 8MB
+                    const BUFFER_LIMIT = 2 * 1024 * 1024; // 2MB
 
                     if (bufferedAmount > BUFFER_LIMIT) {
                         const onLow = () => {

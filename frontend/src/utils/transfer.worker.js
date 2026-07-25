@@ -4,14 +4,16 @@ self.onmessage = (e) => {
 
     // Start New Transfer
     if (file) {
-        // RESET STATE (Worker Reuse Safety)
         self.file = file;
-        self.offset = 0;
-        self.CHUNK_SIZE = 512 * 1024; // Start at 512KB (Adaptive logic can be added later)
+        self.readOffset = 0;
+        self.CHUNK_SIZE = 64 * 1024; // 64KB (Optimal for WebRTC SCTP)
+        self.MAX_QUEUE = 32; // 32 chunks * 64KB = 2MB Prefetch Buffer
+        self.chunkQueue = [];
         self.cancelled = false;
         self.reading = false;
+        self.awaitingAck = true; // Pretend we have initial Ack to start instantly
 
-        // Cleanup old reader if somehow active
+        // Cleanup old reader if active
         if (self.reader && self.reader.readyState === 1) {
             try { self.reader.abort(); } catch (e) { }
         }
@@ -20,24 +22,30 @@ self.onmessage = (e) => {
 
         self.reader.onload = (evt) => {
             if (self.cancelled) return;
-            self.reading = false; // Release lock
+            self.reading = false; // Release disk lock
 
             const data = evt.target.result;
-            const len = data.byteLength;
-
-            // Zero-byte check (Prevent infinite loop)
-            if (!len) {
-                self.postMessage({ type: 'complete' });
+            
+            // Zero-byte check completion
+            if (!data.byteLength) {
+                if (self.chunkQueue.length === 0 && !self.awaitingAck) {
+                    self.postMessage({ type: 'complete' });
+                }
                 return;
             }
 
-            self.postMessage({
-                type: 'chunk',
-                data,
-                offset: self.offset // Send START offset
-            }, [data]);
+            // 1. Push to prefetch memory queue
+            self.chunkQueue.push({
+                data: data,
+                offset: self.readOffset
+            });
+            self.readOffset += data.byteLength;
 
-            self.offset += len;
+            // 2. Instantly push to network if main thread is waiting
+            processQueue();
+
+            // 3. Immediately read next chunk if queue isn't full yet
+            readNext();
         };
 
         self.reader.onerror = (err) => {
@@ -46,18 +54,16 @@ self.onmessage = (e) => {
             self.postMessage({ type: 'error', error: err });
         };
 
+        // Kick off the continuous read loop
         readNext();
     }
-    // Flow Control: Ack received
+    // Flow Control: Network is ready for more data
     else if (type === 'ack') {
-        // Race Condition Protection: Don't read if already reading or cancelled.
-        if (!self.cancelled && !self.reading) {
-            if (self.offset < self.file.size) {
-                readNext();
-            } else {
-                self.postMessage({ type: 'complete' });
-            }
-        }
+        if (self.cancelled) return;
+        self.awaitingAck = true;
+        
+        processQueue(); // Send from memory instantly
+        readNext();     // Top off the memory queue
     }
     // Cancellation
     else if (type === 'cancel') {
@@ -65,14 +71,36 @@ self.onmessage = (e) => {
         if (self.reader && self.reader.readyState === 1) {
             try { self.reader.abort(); } catch (e) { }
         }
+        self.chunkQueue = []; // Free memory
         self.close(); // Terminate worker safely
     }
 };
 
-function readNext() {
-    if (self.reading || self.cancelled) return;
-    self.reading = true; // Acquire lock
+// Pushes chunks to the main thread from memory with zero delay
+function processQueue() {
+    if (self.cancelled || !self.awaitingAck) return;
 
-    const slice = self.file.slice(self.offset, self.offset + self.CHUNK_SIZE);
+    if (self.chunkQueue.length > 0) {
+        const chunk = self.chunkQueue.shift();
+        self.awaitingAck = false; // Consume the ACK
+
+        self.postMessage({
+            type: 'chunk',
+            data: chunk.data,
+            offset: chunk.offset
+        }, [chunk.data]); // Pass by reference for zero-copy transfer
+    } else if (self.readOffset >= self.file.size) {
+        // Disk is fully read AND memory queue is empty
+        self.postMessage({ type: 'complete' });
+    }
+}
+
+// Continuously pulls from disk into RAM
+function readNext() {
+    if (self.reading || self.cancelled || self.readOffset >= self.file.size) return;
+    if (self.chunkQueue.length >= self.MAX_QUEUE) return; // Stop if RAM buffer is full
+
+    self.reading = true; // Acquire disk lock
+    const slice = self.file.slice(self.readOffset, self.readOffset + self.CHUNK_SIZE);
     self.reader.readAsArrayBuffer(slice);
 }
