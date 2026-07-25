@@ -304,45 +304,48 @@ export class P2PClient {
                     offset: offset
                 });
 
-                // Flow Control: Backpressure Handling
+                // Flow Control: Pause/Resume Backpressure Handling
                 const checkBuffer = () => {
-                    if (!this.conn || !this.conn.open) return;
-                    if (!this.worker) return;
+                    if (!this.conn || !this.conn.open || !this.worker) return;
 
                     const dc = this.conn.dataChannel;
                     const bufferedAmount = dc?.bufferedAmount || 0;
                     const BUFFER_LIMIT = 2 * 1024 * 1024; // 2MB
 
-                    if (bufferedAmount > BUFFER_LIMIT) {
+                    // If buffer is full, PAUSE the worker stream
+                    if (bufferedAmount > BUFFER_LIMIT && !this.isPaused) {
+                        this.isPaused = true;
+                        this.worker.postMessage({ type: 'pause' });
+                        
                         const onLow = () => {
                             dc.removeEventListener('bufferedamountlow', onLow);
-                            checkBuffer();
+                            this.isPaused = false;
+                            if (this.worker) this.worker.postMessage({ type: 'resume' });
                         };
                         dc.addEventListener('bufferedamountlow', onLow);
-                    } else {
-                        this.worker.postMessage({ type: 'ack' });
-
-                        const progress = Math.min(100, Math.round(((offset + data.byteLength) / file.size) * 100));
-
-                        // Speed Calculation (Sender)
-                        const now = Date.now();
-                        const timeDiff = (now - this.lastSpeedTime) / 1000;
-                        if (timeDiff >= 1) {
-                            const bytesDiff = offset - this.lastBytes;
-                            this.currentSpeed = bytesDiff / timeDiff / (1024 * 1024); // MB/s
-                            this.lastBytes = offset;
-                            this.lastSpeedTime = now;
-                        }
-
-                        this.onProgress(progress, (this.currentSpeed || 0).toFixed(1));
-
-                        this.updateNotification(
-                            `Sending ${file.name}`,
-                            `${progress}% - ${this.formatBytes(offset)} / ${this.formatBytes(file.size)}`,
-                            'file-transfer',
-                            progress
-                        );
                     }
+
+                    // Proceed with normal progress calculations
+                    const progress = Math.min(100, Math.round(((offset + data.byteLength) / file.size) * 100));
+
+                    // Speed Calculation (Sender)
+                    const now = Date.now();
+                    const timeDiff = (now - this.lastSpeedTime) / 1000;
+                    if (timeDiff >= 1) {
+                        const bytesDiff = offset - this.lastBytes;
+                        this.currentSpeed = bytesDiff / timeDiff / (1024 * 1024); // MB/s
+                        this.lastBytes = offset;
+                        this.lastSpeedTime = now;
+                    }
+
+                    this.onProgress(progress, (this.currentSpeed || 0).toFixed(1));
+
+                    this.updateNotification(
+                        `Sending ${file.name}`,
+                        `${progress}% - ${this.formatBytes(offset)} / ${this.formatBytes(file.size)}`,
+                        'file-transfer',
+                        progress
+                    );
                 };
 
                 checkBuffer();
@@ -364,6 +367,7 @@ export class P2PClient {
         this.lastBytes = 0;
         this.lastSpeedTime = Date.now();
         this.currentSpeed = 0;
+        this.isPaused = false;
         this.worker.postMessage({ file });
     }
 
