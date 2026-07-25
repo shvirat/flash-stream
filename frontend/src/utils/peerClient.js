@@ -311,7 +311,7 @@ export class P2PClient {
 
                     const dc = this.conn.dataChannel;
                     const bufferedAmount = dc?.bufferedAmount || 0;
-                    const BUFFER_LIMIT = 1024 * 1024; // 1MB
+                    const BUFFER_LIMIT = 8 * 1024 * 1024; // 8MB
 
                     if (bufferedAmount > BUFFER_LIMIT) {
                         const onLow = () => {

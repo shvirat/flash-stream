@@ -7,7 +7,7 @@ self.onmessage = (e) => {
         // RESET STATE (Worker Reuse Safety)
         self.file = file;
         self.offset = 0;
-        self.CHUNK_SIZE = 256 * 1024; // Start at 256KB (Adaptive logic can be added later)
+        self.CHUNK_SIZE = 512 * 1024; // Start at 512KB (Adaptive logic can be added later)
         self.cancelled = false;
         self.reading = false;
 
