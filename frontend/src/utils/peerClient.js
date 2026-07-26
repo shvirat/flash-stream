@@ -327,8 +327,9 @@ export class P2PClient {
                         dc.addEventListener('bufferedamountlow', onLow);
                     }
 
-                    // Proceed with normal progress calculations
-                    const progress = Math.min(100, Math.round(((offset + data.byteLength) / file.size) * 100));
+                    const sentBytes = Math.max(0, (offset + data.byteLength) - bufferedAmount);
+                    // Cap it at 99%. It only hits 100% when the Receiver says so.
+                    const progress = Math.min(99, Math.round((sentBytes / file.size) * 100));
 
                     // Speed Calculation (Sender)
                     const now = Date.now();
@@ -353,11 +354,7 @@ export class P2PClient {
                 checkBuffer();
             }
             else if (type === 'complete') {
-                this.emitStatus('TRANSFER_SUCCESS', 'File Sent!');
-                this.updateNotification('File Sent', `Successfully sent ${file.name}`, 'file-transfer');
-                this.worker.terminate();
-                this.worker = null;
-                this.pendingFiles.delete(this.conn.peer);
+                this.emitStatus('INFO', 'Finalizing transfer...');
             }
             else if (type === 'error') {
                 console.error('Worker error:', error);
@@ -566,6 +563,8 @@ export class P2PClient {
 
             // 3. Check Complete
             if (this.receivedSize >= this.fileMeta.size) {
+                conn.send({ type: 'download-complete' });
+
                 if (this.speedInterval) clearInterval(this.speedInterval);
                 this.onProgress(100, (this.currentSpeed || 0).toFixed(1));
                 this.emitStatus('TRANSFER_SUCCESS', 'Download Complete');
@@ -613,6 +612,18 @@ export class P2PClient {
             this.receivedSize = 0;
             this.fileMeta = null;
             this.onProgress(0);
+        } else if (data.type === 'download-complete') {
+            // THE NEW SENDER COMPLETION LOGIC
+            this.emitStatus('TRANSFER_SUCCESS', 'File Sent!');
+            this.updateNotification('File Sent', `Successfully sent ${this.fileMeta?.name || 'file'}`, 'file-transfer');
+            
+            if (this.worker) {
+                this.worker.terminate();
+                this.worker = null;
+            }
+            if (this.conn) this.pendingFiles.delete(this.conn.peer);
+            this.onProgress(100, '0.0');
+            
         } else if (data.type === 'text') {
             this.onTextReceived(data.text);
         } else if (data.type === 'error') {
