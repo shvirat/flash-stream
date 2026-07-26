@@ -59,13 +59,13 @@ export class P2PClient {
             };
 
             const localServer = {
-                // host: 'localhost',
-                // port: 9000,
-                // path: '/peerjs'
-                host: 'p2p-signaling-server-spb6.onrender.com',
-                port: 443,
-                secure: true,
+                host: 'localhost',
+                port: 9000,
                 path: '/peerjs'
+                // host: 'p2p-signaling-server-spb6.onrender.com',
+                // port: 443,
+                // secure: true,
+                // path: '/peerjs'
             };
 
             const config = isProduction ? { ...signalingServer, config: { iceServers } } : { ...localServer, config: { iceServers } };
@@ -120,21 +120,7 @@ export class P2PClient {
             return;
         }
 
-        const conn = this.peer.connect(remotePeerId); // Removed { reliable: true } which can cause hangs
-
-        // Connection Timeout Safety
-        // const timer = setTimeout(() => {
-        //     if (conn && !conn.open) {
-        //         console.warn('Connection timed out');
-        //         conn.close();
-        //         this.emitStatus('ERROR', 'Connection Timed Out');
-        //     }
-        // }, 15000);
-
-        // // Clear timeout on any final state
-        // conn.on('open', () => clearTimeout(timer));
-        // conn.on('close', () => clearTimeout(timer));
-        // conn.on('error', () => clearTimeout(timer));
+        const conn = this.peer.connect(remotePeerId);
 
         conn._timeout = setTimeout(() => {
             if (conn && !conn.open) {
@@ -159,7 +145,7 @@ export class P2PClient {
             this.heartbeats.delete(conn.peer);
         }
 
-        conn._lastPong = Date.now(); // We still attach timestamp to conn for convenience, or we could use another Map. Keeping it on conn is fine for data, but interval should be managed.
+        conn._lastPong = Date.now();
 
         const interval = setInterval(() => {
             if (conn.open) {
@@ -541,7 +527,7 @@ export class P2PClient {
         } else if (data.type === 'transfer-ready') {
             const pendingFile = this.pendingFiles?.get(conn.peer);
             if (pendingFile) {
-                this.emitStatus('INFO', 'Peer Ready. Starting Transfer...');
+                this.emitStatus('INFO', 'Transferring...');
                 this.startWorker(pendingFile);
             }
 

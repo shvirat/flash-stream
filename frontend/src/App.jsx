@@ -1,4 +1,5 @@
 import { BrowserRouter as Router, Routes, Route, Link, useLocation } from 'react-router-dom';
+import { useEffect } from 'react';
 import Sender from './components/Sender';
 import Logo from './assets/logo.svg';
 import Receiver from './components/Receiver';
@@ -11,6 +12,13 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { fadeIn, slideUp, containerStagger, hoverScale, scaleIn } from './utils/animations';
 
 function Landing() {
+    // Add this near the top of your main App component
+    useEffect(() => {
+        // Silently wake up the Render signaling server on initial page load
+        fetch('https://p2p-signaling-server-spb6.onrender.com/peerjs')
+            .catch(() => {}); // Ignore errors, we just want to trigger the boot sequence
+    }, []);
+
     return (
         <div className="w-full max-w-5xl mx-auto px-4">
             <motion.div

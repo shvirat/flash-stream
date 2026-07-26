@@ -67,16 +67,19 @@ function Receiver() {
 
     const handleConnect = (e) => {
         if (e) e.preventDefault();
+        const finalId = targetId.trim().toUpperCase();
 
-        if (!targetId) { 
+        if (!finalId) { 
             toast.error('Please enter a Sender ID'); 
             return; 
         }
+        
         Notification.requestPermission();
-        localStorage.setItem('lastTargetId', targetId);
+        localStorage.setItem('lastTargetId', finalId);
         localStorage.setItem('lastTargetIdTime', Date.now().toString());
+        
         setStatus('Connecting...');
-        clientRef.current.connect(targetId);
+        clientRef.current.connect(finalId);
     };
 
     const cancelDownload = () => {
@@ -119,22 +122,31 @@ function Receiver() {
                     <label className="text-xs text-emerald-300 font-bold uppercase tracking-wider mb-2 block">
                         Enter Sender ID
                     </label>
-                    <div className="flex flex-col sm:flex-row gap-3">
+                    {/* 1. Use a form with onSubmit */}
+                    <form 
+                        className="flex flex-col sm:flex-row gap-3"
+                        onSubmit={handleConnect}
+                    >
                         <input
                             type="text"
                             value={targetId}
-                            onChange={(e) => setTargetId(e.target.value.toUpperCase())}
+                            onChange={(e) => setTargetId(e.target.value)} // 2. Removed toUpperCase()
                             placeholder="e.g. X7K2M9"
                             maxLength={6}
-                            className="flex-1 bg-black/30 border border-white/10 rounded-xl px-6 py-4 text-2xl font-mono uppercase text-center sm:text-left text-white placeholder-white/20 focus:border-emerald-500/50 focus:ring-2 focus:ring-emerald-500/20 outline-none transition-all tracking-widest"
                             disabled={isConnected}
-                            onKeyDown={(e) => e.key === 'Enter' && handleConnect()}
+                            // 3. Native mobile attributes!
+                            autoComplete="off"
+                            autoCorrect="off"
+                            autoCapitalize="characters"
+                            spellCheck={false}
+                            // CSS 'uppercase' keeps it looking capitalized visually
+                            className="flex-1 bg-black/30 border border-white/10 rounded-xl px-6 py-4 text-2xl font-mono uppercase text-center sm:text-left text-white placeholder-white/20 focus:border-emerald-500/50 focus:ring-2 focus:ring-emerald-500/20 outline-none transition-all tracking-widest"
                         />
                         <button
-                            onClick={handleConnect}
+                            type="submit" // 4. Change to type="submit" and remove onClick
                             disabled={isConnected || !targetId}
                             className={clsx(
-                                "px-8 py-4 rounded-xl font-bold flex items-center justify-center gap-2 transition-all min-w-35cone",
+                                "px-8 py-4 rounded-xl font-bold flex items-center justify-center gap-2 transition-all min-w-35",
                                 isConnected || !targetId
                                     ? "bg-white/5 text-dim cursor-not-allowed"
                                     : "bg-emerald-600 hover:bg-emerald-500 text-white shadow-lg hover:shadow-emerald-500/25 active:scale-95"
@@ -143,7 +155,7 @@ function Receiver() {
                             {isConnected ? <ShieldCheck size={20} /> : status === 'Connecting...' ? <Loader2 className="animate-spin" size={20} /> : <Link size={20} />}
                             {isConnected ? 'Linked' : status === 'Connecting...' ? 'Joining' : 'Connect'}
                         </button>
-                    </div>
+                    </form>
                     <p className="text-xs text-dim mt-3 ml-1">
                         Enter the unique 6-character code from the sender's screen.
                     </p>

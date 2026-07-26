@@ -103,35 +103,30 @@ function ClipboardSession({ mode, visible }) {
         return () => client.destroy();
     }, []);
 
-    // const handleConnect = () => {
-    //     if (!connectId) return;
-    //     if (mode === 'client') {
-    //         clientRef.current.connections.forEach(c => c.close());
-    //         clientRef.current.connections = [];
-    //     }
-    //     setStatus('Connecting...');
-    //     clientRef.current.connect(connectId);
-    // };
+    const handleConnect = (e) => {
+        if (e) e.preventDefault(); // Stop page reload
 
-    const handleConnect = () => {
-        if (!connectId) return;
+        const finalId = connectId.trim().toUpperCase(); // Format it safely here!
+        
+        if (!finalId) {
+            toast.error("Please enter a code");
+            return;
+        }
 
-        // Fix #2: Prevent the UI from getting stuck on duplicate attempts
-        if (clientRef.current.connections.some(c => c.peer === connectId && c.open)) {
+        // Prevent UI freezing on duplicate connection attempts
+        if (clientRef.current.connections.some(c => c.peer === finalId && c.open)) {
             toast.success('Already connected');
             return;
         }
 
         if (mode === 'client') {
-            // Fix #3: Trigger safe teardown. Let P2PClient's internal 
-            // conn.on('close') events naturally filter the array in the background.
             clientRef.current.connections.forEach(c => {
-                try { c.close(); } catch(e) {}
+                try { c.close(); } catch(err) {}
             });
         }
         
         setStatus('Connecting...');
-        clientRef.current.connect(connectId);
+        clientRef.current.connect(finalId);
     };
 
     const handleTextChange = (e) => {
@@ -179,22 +174,37 @@ function ClipboardSession({ mode, visible }) {
                         <label className={`text-xs text-${accentColor}-300 font-bold uppercase tracking-wider mb-2 block`}>
                             {mode === 'client' ? 'Enter Host Code' : 'Connect to Peer'}
                         </label>
-                        <div className="flex gap-2">
+                        {/* 1. Change div to form and use onSubmit */}
+                        <form 
+                            className="flex gap-2"
+                            onSubmit={handleConnect}
+                        >
                             <input
                                 value={connectId}
-                                onChange={(e) => setConnectId(e.target.value.toUpperCase())}
+                                onChange={(e) => setConnectId(e.target.value)} // 2. Removed toUpperCase()
                                 placeholder="PASTE CODE"
                                 maxLength={6}
+                                // 3. Add mobile keyboard hints
+                                autoComplete="off"
+                                autoCorrect="off"
+                                autoCapitalize="characters"
+                                spellCheck={false}
                                 className="text-lg flex-1 min-w-0 bg-black/30 border border-white/10 rounded-lg px-2 py-2 font-mono uppercase text-white placeholder-white/20 focus:border-white/30 outline-none"
-                                onKeyDown={(e) => e.key === 'Enter' && handleConnect()}
+                                // 4. Removed onKeyDown completely
                             />
                             <button
-                                onClick={handleConnect}
-                                className={`p-2 rounded-lg transition-colors bg-${accentColor}-600 hover:bg-${accentColor}-300 text-white shadow-lg cursor-pointer`}
+                                type="submit" // 5. Change to submit and remove onClick
+                                className={clsx(
+                                    "p-2 rounded-lg transition-colors text-white shadow-lg cursor-pointer",
+                                    // 6. Hardcode Tailwind classes so they don't get purged!
+                                    mode === 'host' ? "bg-purple-600 hover:bg-purple-300" :
+                                    mode === 'client' ? "bg-emerald-600 hover:bg-emerald-300" :
+                                    "bg-blue-600 hover:bg-blue-300"
+                                )}
                             >
                                 <ArrowRight size={18} />
                             </button>
-                        </div>
+                        </form>
                     </div>
                 )}
             </div>
