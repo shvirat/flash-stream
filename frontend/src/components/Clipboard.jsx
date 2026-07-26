@@ -78,7 +78,7 @@ function ClipboardSession({ mode, visible }) {
             } else {
                 setStatus(message);
             }
-            setPeers(client.connections.map(c => c.peer));
+            setPeers(client.connections.filter(c => c.open).map(c => c.peer));
         };
 
         client.onTextReceived = (newText) => {
@@ -103,12 +103,33 @@ function ClipboardSession({ mode, visible }) {
         return () => client.destroy();
     }, []);
 
+    // const handleConnect = () => {
+    //     if (!connectId) return;
+    //     if (mode === 'client') {
+    //         clientRef.current.connections.forEach(c => c.close());
+    //         clientRef.current.connections = [];
+    //     }
+    //     setStatus('Connecting...');
+    //     clientRef.current.connect(connectId);
+    // };
+
     const handleConnect = () => {
         if (!connectId) return;
-        if (mode === 'client') {
-            clientRef.current.connections.forEach(c => c.close());
-            clientRef.current.connections = [];
+
+        // Fix #2: Prevent the UI from getting stuck on duplicate attempts
+        if (clientRef.current.connections.some(c => c.peer === connectId && c.open)) {
+            toast.success('Already connected');
+            return;
         }
+
+        if (mode === 'client') {
+            // Fix #3: Trigger safe teardown. Let P2PClient's internal 
+            // conn.on('close') events naturally filter the array in the background.
+            clientRef.current.connections.forEach(c => {
+                try { c.close(); } catch(e) {}
+            });
+        }
+        
         setStatus('Connecting...');
         clientRef.current.connect(connectId);
     };

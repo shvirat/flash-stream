@@ -85,6 +85,9 @@ export class P2PClient {
                 // Fix for zombie connection: If connecting fails (e.g. wrong ID), cleanup the pending connection
                 if (['peer-unavailable', 'socket-error', 'browser-incompatible'].includes(err.type)) {
                     if (this.conn && !this.conn.open) {
+                        // Clear the ghost timer!
+                        if (this.conn._timeout) clearTimeout(this.conn._timeout);
+                        
                         this.connections = this.connections.filter(c => c !== this.conn);
                         this.conn = null;
                     }
@@ -120,7 +123,20 @@ export class P2PClient {
         const conn = this.peer.connect(remotePeerId); // Removed { reliable: true } which can cause hangs
 
         // Connection Timeout Safety
-        const timer = setTimeout(() => {
+        // const timer = setTimeout(() => {
+        //     if (conn && !conn.open) {
+        //         console.warn('Connection timed out');
+        //         conn.close();
+        //         this.emitStatus('ERROR', 'Connection Timed Out');
+        //     }
+        // }, 15000);
+
+        // // Clear timeout on any final state
+        // conn.on('open', () => clearTimeout(timer));
+        // conn.on('close', () => clearTimeout(timer));
+        // conn.on('error', () => clearTimeout(timer));
+
+        conn._timeout = setTimeout(() => {
             if (conn && !conn.open) {
                 console.warn('Connection timed out');
                 conn.close();
@@ -128,10 +144,10 @@ export class P2PClient {
             }
         }, 15000);
 
-        // Clear timeout on any final state
-        conn.on('open', () => clearTimeout(timer));
-        conn.on('close', () => clearTimeout(timer));
-        conn.on('error', () => clearTimeout(timer));
+        // Clear it on normal events
+        conn.on('open', () => clearTimeout(conn._timeout));
+        conn.on('close', () => clearTimeout(conn._timeout));
+        conn.on('error', () => clearTimeout(conn._timeout));
 
         this.handleConnection(conn);
     }
@@ -186,14 +202,14 @@ export class P2PClient {
             console.log('Connected to:', conn.peer);
             // Optimization: Set Backpressure threshold once
             if (conn.dataChannel) {
-                conn.dataChannel.bufferedAmountLowThreshold = 1024 * 1024; // 1MB
+                conn.dataChannel.bufferedAmountLowThreshold = 4 * 1024 * 1024;
             }
             this.emitStatus('CONNECTED', 'Connected');
             this.onPeerJoin(conn);
             this.startHeartbeat(conn);
         });
 
-        conn.on('data', (data) => {
+            conn.on('data', (data) => {
             // Queue data handling to prevent race conditions (e.g. meta clearing file while chunk is writing)
             this.dataQueue = this.dataQueue.then(async () => {
                 try {
@@ -310,7 +326,7 @@ export class P2PClient {
 
                     const dc = this.conn.dataChannel;
                     const bufferedAmount = dc?.bufferedAmount || 0;
-                    const BUFFER_LIMIT = 2 * 1024 * 1024; // 2MB
+                    const BUFFER_LIMIT = 8 * 1024 * 1024; // 2MB
 
                     // If buffer is full, PAUSE the worker stream
                     if (bufferedAmount > BUFFER_LIMIT && !this.isPaused) {
@@ -472,34 +488,46 @@ export class P2PClient {
             this.fileMeta = { ...data, name: sanitizedName };
             this.receivedSize = 0;
 
+            this.pendingDbWrites = [];
+
             // Receiver Batching State
             this.receiverBatch = [];
             this.receiverBatchSize = 0;
             this.receiverBatchOffset = 0;
 
-            // --- DECOUPLED SPEEDOMETER & UI LOOP ---
-            this.transferStartTime = Date.now();
+            // --- REAL-TIME SPEEDOMETER TRACKING ---
+            this.lastReceivedSize = 0;
+            this.lastSpeedTime = Date.now();
             
             if (this.speedInterval) clearInterval(this.speedInterval);
+            
             this.speedInterval = setInterval(() => {
-                const now = Date.now();
-                const totalSeconds = (now - this.transferStartTime) / 1000;
-                
-                if (totalSeconds > 0 && this.fileMeta) {
-                    // Calculate TRUE average speed from start to current moment
-                    const averageSpeed = (this.receivedSize / (1024 * 1024)) / totalSeconds;
-                    const progress = Math.min(100, Math.round((this.receivedSize / this.fileMeta.size) * 100));
+                if (this.fileMeta) {
+                    const now = Date.now();
+                    const timeDiff = (now - this.lastSpeedTime) / 1000; // time in seconds since last tick
                     
-                    this.onProgress(progress, averageSpeed.toFixed(1));
-                    
-                    this.updateNotification(
-                        `Receiving ${this.fileMeta.name}`,
-                        `${progress}% - ${this.formatBytes(this.receivedSize)} / ${this.formatBytes(this.fileMeta.size)}`,
-                        'file-transfer',
-                        progress
-                    );
+                    // 1. Change the timeDiff check to 0.5 (500ms)
+                    if (timeDiff >= 0.5) {
+                        const bytesDiff = this.receivedSize - this.lastReceivedSize;
+                        const currentSpeed = (bytesDiff / timeDiff) / (1024 * 1024); // MB/s
+                        
+                        const progress = Math.min(100, Math.round((this.receivedSize / this.fileMeta.size) * 100));
+                        
+                        this.onProgress(progress, currentSpeed.toFixed(1));
+                        
+                        this.updateNotification(
+                            `Receiving ${this.fileMeta.name}`,
+                            `${progress}% - ${this.formatBytes(this.receivedSize)} / ${this.formatBytes(this.fileMeta.size)}`,
+                            'file-transfer',
+                            progress
+                        );
+
+                        // Reset the window for the next tick
+                        this.lastReceivedSize = this.receivedSize;
+                        this.lastSpeedTime = now;
+                    }
                 }
-            }, 250); // Update UI 4 times a second safely without blocking the network
+            }, 500); // 2. Change the interval trigger to 500
 
             // Ensure connection is clean for this file
             try { await dbUtil.clearFile(sanitizedName); } catch (e) { console.warn(e); }
@@ -535,49 +563,52 @@ export class P2PClient {
             this.receivedSize += data.data.byteLength;
 
             // 2. Flush to IndexedDB in a single bulk transaction
-            if (this.receiverBatchSize >= 2 * 1024 * 1024 || this.receivedSize >= this.fileMeta.size) {
-                try {
-                    // IndexedDB will automatically sort them correctly, even if they arrived out of order
-                    await dbUtil.storeChunkBatch(this.fileMeta.name, this.receiverBatch);
-                } catch (err) {
-                    console.error('DB Error:', err);
-                    this.emitStatus('ERROR', 'DB Write Failed');
-                    return;
-                }
-
-                // Clear RAM batch
+            if (this.receiverBatchSize >= 8 * 1024 * 1024 || this.receivedSize >= this.fileMeta.size) {
+                // Copy the batch instantly so the network can keep using 'this.receiverBatch'
+                const batchToSave = this.receiverBatch; 
                 this.receiverBatch = [];
                 this.receiverBatchSize = 0;
+
+                // Fire the DB write in the background and track the Promise
+                const writePromise = dbUtil.storeChunkBatch(this.fileMeta.name, batchToSave).catch(err => {
+                    console.error('DB Error:', err);
+                    this.emitStatus('ERROR', 'DB Write Failed');
+                });
+                
+                this.pendingDbWrites.push(writePromise);
             }
 
             // 3. Check Complete
             if (this.receivedSize >= this.fileMeta.size) {
-                // Stop the UI speedometer loop
                 if (this.speedInterval) clearInterval(this.speedInterval);
-
-                // FORCE UI to 100% to fix the "Stuck at 99%" visual bug
                 this.onProgress(100, (this.currentSpeed || 0).toFixed(1));
-
                 this.emitStatus('TRANSFER_SUCCESS', 'Download Complete');
                 this.updateNotification('Download Complete', `Finished receiving ${this.fileMeta.name}`, 'file-transfer');
 
-                try {
-                    const blob = await dbUtil.getFile(this.fileMeta.name, this.fileMeta.mime);
+                // CAPTURE METADATA LOCALLY: Prevent 'null' reference errors
+                const finalMeta = this.fileMeta;
+
+                // Wait for all background DB writes to finish before reading the final file!
+                Promise.all(this.pendingDbWrites).then(() => {
+                    return dbUtil.getFile(finalMeta.name, finalMeta.mime);
+                }).then((blob) => {
                     if (blob) {
-                        this.onFileReceived(blob, this.fileMeta.name);
-                        dbUtil.clearFile(this.fileMeta.name).catch(console.warn);
+                        this.onFileReceived(blob, finalMeta.name);
+                        dbUtil.clearFile(finalMeta.name).catch(console.warn);
                     } else {
-                        console.error('File reassembly failed: Blob is null');
                         this.emitStatus('ERROR', 'Error: File corrupt');
                     }
-                } catch (err) {
+                }).catch((err) => {
                     console.error('File reassembly error:', err);
                     this.emitStatus('ERROR', 'Error: Could not save file');
-                }
-
-                this.receivedSize = 0;
-                this.fileMeta = null;
+                }).finally(() => {
+                    // CLEANUP AFTER EVERYTHING IS DONE
+                    this.receivedSize = 0;
+                    this.fileMeta = null;
+                    this.pendingDbWrites = [];
+                });
             }
+
         } else if (data.type === 'cancel') {
             this.emitStatus('INFO', 'Transfer Cancelled by Peer');
 

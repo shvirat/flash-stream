@@ -6,8 +6,8 @@ self.onmessage = (e) => {
     if (file) {
         self.file = file;
         self.readOffset = 0;
-        self.CHUNK_SIZE = 64 * 1024; // 64KB (Optimal for WebRTC SCTP)
-        self.MAX_QUEUE = 32; // 2MB Prefetch Buffer (32 * 64KB)
+        self.CHUNK_SIZE = 256 * 1024; // 256KB
+        self.MAX_QUEUE = 32;
         self.chunkQueue = [];
         self.cancelled = false;
         self.reading = false;
