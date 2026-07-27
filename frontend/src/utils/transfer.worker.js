@@ -2,7 +2,6 @@
 self.onmessage = (e) => {
     const { file, type } = e.data;
 
-    // Start New Transfer
     if (file) {
         self.file = file;
         self.readOffset = 0;
@@ -11,7 +10,7 @@ self.onmessage = (e) => {
         self.chunkQueue = [];
         self.cancelled = false;
         self.reading = false;
-        self.paused = false; // Stream starts unpaused
+        self.paused = false;
 
         if (self.reader && self.reader.readyState === 1) {
             try { self.reader.abort(); } catch (e) { }

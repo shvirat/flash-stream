@@ -80,7 +80,7 @@ function Sender() {
                         if (pastedFile) {
                             setFile(pastedFile);
                             toast.success('Pasted File Selected');
-                            break; // Only take the first file
+                            break;
                         }
                     }
                 }
@@ -172,7 +172,7 @@ function Sender() {
         if (e.target.files?.[0]) {
             const selectedFile = e.target.files[0];
             setFile(selectedFile);
-            e.target.value = null; // Allow re-selecting the same file
+            e.target.value = null;
         }
     };
 

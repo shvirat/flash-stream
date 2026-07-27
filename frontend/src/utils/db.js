@@ -1,5 +1,4 @@
 import { openDB } from 'idb';
-// Handles all IndexedDB operations for large file storage
 
 const DB_NAME = 'FlashStreamDB';
 const STORE_NAME = 'file_chunks';

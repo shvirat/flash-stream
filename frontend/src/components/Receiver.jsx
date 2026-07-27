@@ -74,7 +74,19 @@ function Receiver() {
             return; 
         }
         
-        Notification.requestPermission();
+        // Safely request notifications without crashing the connection
+        if ('Notification' in window && window.Notification) {
+            try {
+                const permissionPromise = Notification.requestPermission();
+                if (permissionPromise) {
+                    permissionPromise.catch(() => {
+                        console.warn("Notification permission prompt failed or was dismissed.");
+                    });
+                }
+            } catch (err) {
+                console.warn("Notifications are not supported on this device.");
+            }
+        }
         localStorage.setItem('lastTargetId', finalId);
         localStorage.setItem('lastTargetIdTime', Date.now().toString());
         
@@ -122,7 +134,7 @@ function Receiver() {
                     <label className="text-xs text-emerald-300 font-bold uppercase tracking-wider mb-2 block">
                         Enter Sender ID
                     </label>
-                    {/* 1. Use a form with onSubmit */}
+
                     <form 
                         className="flex flex-col sm:flex-row gap-3"
                         onSubmit={handleConnect}
@@ -130,11 +142,10 @@ function Receiver() {
                         <input
                             type="text"
                             value={targetId}
-                            onChange={(e) => setTargetId(e.target.value)} // 2. Removed toUpperCase()
+                            onChange={(e) => setTargetId(e.target.value)} 
                             placeholder="e.g. X7K2M9"
                             maxLength={6}
                             disabled={isConnected}
-                            // 3. Native mobile attributes!
                             autoComplete="off"
                             autoCorrect="off"
                             autoCapitalize="characters"
@@ -143,7 +154,7 @@ function Receiver() {
                             className="flex-1 bg-black/30 border border-white/10 rounded-xl px-6 py-4 text-2xl font-mono uppercase text-center sm:text-left text-white placeholder-white/20 focus:border-emerald-500/50 focus:ring-2 focus:ring-emerald-500/20 outline-none transition-all tracking-widest"
                         />
                         <button
-                            type="submit" // 4. Change to type="submit" and remove onClick
+                            type="submit" 
                             disabled={isConnected || !targetId}
                             className={clsx(
                                 "px-8 py-4 rounded-xl font-bold flex items-center justify-center gap-2 transition-all min-w-35",

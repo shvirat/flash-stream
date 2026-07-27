@@ -16,8 +16,8 @@ export class P2PClient {
         this.worker = null;
         this.lastNotificationTime = 0;
         this.dataQueue = Promise.resolve();
-        this.heartbeats = new Map(); // PeerId -> IntervalId
-        this.pendingFiles = new Map(); // PeerId -> File
+        this.heartbeats = new Map(); 
+        this.pendingFiles = new Map(); 
 
         // Auto-clear notification when app is opened
         this.handleVisibilityChange = () => {
@@ -43,7 +43,6 @@ export class P2PClient {
                 shortId = array[0].toString(36).substring(2, 8).toUpperCase();
             }
 
-            // Determine Configuration based on Environment
             const isProduction = window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1';
 
             const iceServers = [
@@ -82,10 +81,10 @@ export class P2PClient {
                 console.error('Peer error:', err);
                 this.emitStatus('ERROR', 'Error: ' + err.type);
 
-                // Fix for zombie connection: If connecting fails (e.g. wrong ID), cleanup the pending connection
+                // Fix for zombie connection: If connecting fails
                 if (['peer-unavailable', 'socket-error', 'browser-incompatible'].includes(err.type)) {
                     if (this.conn && !this.conn.open) {
-                        // Clear the ghost timer!
+                        
                         if (this.conn._timeout) clearTimeout(this.conn._timeout);
                         
                         this.connections = this.connections.filter(c => c !== this.conn);
@@ -150,12 +149,12 @@ export class P2PClient {
         const interval = setInterval(() => {
             if (conn.open) {
                 conn.send({ type: 'ping' });
-                if (Date.now() - conn._lastPong > 60000) { // Relaxed timeout (60s)
+                if (Date.now() - conn._lastPong > 60000) { 
                     console.warn('Peer dead (heartbeat timeout)');
                     conn.close();
                 }
             }
-        }, 10000); // Relaxed interval (10s)
+        }, 10000); 
 
         this.heartbeats.set(conn.peer, interval);
     }
@@ -196,7 +195,7 @@ export class P2PClient {
         });
 
             conn.on('data', (data) => {
-            // Queue data handling to prevent race conditions (e.g. meta clearing file while chunk is writing)
+            // Queue data handling to prevent race conditions
             this.dataQueue = this.dataQueue.then(async () => {
                 try {
                     await this.handleData(data, conn);
@@ -223,7 +222,7 @@ export class P2PClient {
             this.connections = this.connections.filter(c => c !== conn);
             if (this.pendingFiles) this.pendingFiles.delete(conn.peer);
             this.emitStatus('DISCONNECTED', 'Disconnected');
-            this.onProgress(0); // Reset progress on disconnect
+            this.onProgress(0); 
         });
 
         conn.on('error', (err) => {
@@ -257,7 +256,6 @@ export class P2PClient {
         this.pendingFiles = this.pendingFiles || new Map();
         this.pendingFiles.set(this.conn.peer, file);
 
-        // Send metadata first
         this.conn.send({
             type: 'meta',
             name: file.name,
@@ -267,7 +265,7 @@ export class P2PClient {
 
         this.emitStatus('INFO', 'Waiting for peer to be ready...');
 
-        // Safety Timeout: If peer doesn't reply "ready" in 60s, cancel.
+        // If peer doesn't reply "ready" in 60s, cancel.
         if (this.handshakeTimer) clearTimeout(this.handshakeTimer);
         this.handshakeTimer = setTimeout(() => {
             if (this.pendingFiles.has(this.conn.peer)) {
@@ -328,7 +326,7 @@ export class P2PClient {
                     }
 
                     const sentBytes = Math.max(0, (offset + data.byteLength) - bufferedAmount);
-                    // Cap it at 99%. It only hits 100% when the Receiver says so.
+                    // It only hits 100% when the Receiver says so.
                     const progress = Math.min(99, Math.round((sentBytes / file.size) * 100));
 
                     // Speed Calculation (Sender)
@@ -422,7 +420,6 @@ export class P2PClient {
         this.connections = [];
         this.peerId = null;
 
-        // Optional: Clear old chunks
         dbUtil.clearAll();
 
         // Reset Callbacks
@@ -487,9 +484,8 @@ export class P2PClient {
             this.speedInterval = setInterval(() => {
                 if (this.fileMeta) {
                     const now = Date.now();
-                    const timeDiff = (now - this.lastSpeedTime) / 1000; // time in seconds since last tick
+                    const timeDiff = (now - this.lastSpeedTime) / 1000; 
                     
-                    // 1. Change the timeDiff check to 0.5 (500ms)
                     if (timeDiff >= 0.5) {
                         const bytesDiff = this.receivedSize - this.lastReceivedSize;
                         const currentSpeed = (bytesDiff / timeDiff) / (1024 * 1024); // MB/s
@@ -505,12 +501,11 @@ export class P2PClient {
                             progress
                         );
 
-                        // Reset the window for the next tick
                         this.lastReceivedSize = this.receivedSize;
                         this.lastSpeedTime = now;
                     }
                 }
-            }, 500); // 2. Change the interval trigger to 500
+            }, 500);
 
             // Ensure connection is clean for this file
             try { await dbUtil.clearFile(sanitizedName); } catch (e) { console.warn(e); }
@@ -524,7 +519,7 @@ export class P2PClient {
         } else if (data.type === 'transfer-ready') {
             const pendingFile = this.pendingFiles?.get(conn.peer);
             if (pendingFile) {
-                this.emitStatus('INFO', 'Transferring...');
+                this.emitStatus('INFO', `Sending ${truncate(sanitizedName)}`);
                 this.startWorker(pendingFile);
             }
 
@@ -613,7 +608,6 @@ export class P2PClient {
             this.fileMeta = null;
             this.onProgress(0);
         } else if (data.type === 'download-complete') {
-            // THE NEW SENDER COMPLETION LOGIC
             this.emitStatus('TRANSFER_SUCCESS', 'File Sent!');
             this.updateNotification('File Sent', `Successfully sent ${this.fileMeta?.name || 'file'}`, 'file-transfer');
             
@@ -633,7 +627,7 @@ export class P2PClient {
 
     async updateNotification(title, body, tag, progress = null) {
         if (!('serviceWorker' in navigator)) return;
-        if (Notification.permission !== 'granted') return; // Assume permission handled in UI
+        if (Notification.permission !== 'granted') return;
         if (document.visibilityState !== 'hidden') return;
 
         const now = Date.now();

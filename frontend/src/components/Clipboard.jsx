@@ -174,29 +174,26 @@ function ClipboardSession({ mode, visible }) {
                         <label className={`text-xs text-${accentColor}-300 font-bold uppercase tracking-wider mb-2 block`}>
                             {mode === 'client' ? 'Enter Host Code' : 'Connect to Peer'}
                         </label>
-                        {/* 1. Change div to form and use onSubmit */}
+            
                         <form 
                             className="flex gap-2"
                             onSubmit={handleConnect}
                         >
                             <input
                                 value={connectId}
-                                onChange={(e) => setConnectId(e.target.value)} // 2. Removed toUpperCase()
+                                onChange={(e) => setConnectId(e.target.value)} 
                                 placeholder="PASTE CODE"
                                 maxLength={6}
-                                // 3. Add mobile keyboard hints
                                 autoComplete="off"
                                 autoCorrect="off"
                                 autoCapitalize="characters"
                                 spellCheck={false}
                                 className="text-lg flex-1 min-w-0 bg-black/30 border border-white/10 rounded-lg px-2 py-2 font-mono uppercase text-white placeholder-white/20 focus:border-white/30 outline-none"
-                                // 4. Removed onKeyDown completely
                             />
                             <button
-                                type="submit" // 5. Change to submit and remove onClick
+                                type="submit" 
                                 className={clsx(
                                     "p-2 rounded-lg transition-colors text-white shadow-lg cursor-pointer",
-                                    // 6. Hardcode Tailwind classes so they don't get purged!
                                     mode === 'host' ? "bg-purple-600 hover:bg-purple-300" :
                                     mode === 'client' ? "bg-emerald-600 hover:bg-emerald-300" :
                                     "bg-blue-600 hover:bg-blue-300"
